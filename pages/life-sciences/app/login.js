@@ -6,20 +6,20 @@ import { CONFIG } from "@/lib/life_sciences_app_lib/config";
 import TOTPGenerator from "@/components/TOTPGenerator";
 
 // User credentials for demonstration
-const USER_CREDENTIALS = {
+export const USER_CREDENTIALS = {
   submitter1: {
     email: "williamoconnellpmp+submitter1@gmail.com",
     password: "Password123!",
     role: "Submitter",
     displayName: "Submitter 1",
-    requiresMFA: false,
+    requiresMFA: true, // MFA now required for all users
   },
   submitter2: {
     email: "williamoconnellpmp+submitter2@gmail.com",
     password: "Password123!",
     role: "Submitter",
     displayName: "Submitter 2",
-    requiresMFA: false,
+    requiresMFA: true, // MFA now required for all users
   },
   approver1: {
     email: "williamoconnellpmp+approver1@gmail.com",
@@ -40,6 +40,81 @@ const USER_CREDENTIALS = {
 export default function ProductionLoginPage() {
   const router = useRouter();
   const [copiedField, setCopiedField] = useState(null);
+  const [approverMfaVisible, setApproverMfaVisible] = useState(null); // Track which approver MFA to show prominently
+
+  // Check if user is already logged in - redirect to app
+  // BUT: If there's a ?force=true query param or logout flag, always show login page
+  useEffect(() => {
+    if (typeof window === "undefined" || !router.isReady) return;
+    
+    // Check for logout flag (set during logout)
+    const logoutFlag = typeof window !== "undefined" ? window.sessionStorage.getItem("vdc_logout_flag") : null;
+    const isForcedLogout = router.query.force === "true" || logoutFlag;
+    
+    // Debug logging
+    console.log("[Login Page] Check:", {
+      force: router.query.force,
+      logoutFlag: logoutFlag,
+      isForcedLogout: isForcedLogout,
+      hasTokens: !!window.localStorage.getItem("vdc_cognito_tokens")
+    });
+    
+    // If force=true or logout flag exists, clear any tokens and show login page
+    // This MUST run before the isLoggedIn check
+    if (isForcedLogout) {
+      console.log("[Login Page] Forced logout detected - clearing tokens");
+      try {
+        const { clearTokens } = require("@/lib/life_sciences_app_lib/auth");
+        // Clear tokens immediately
+        clearTokens();
+        // Also manually clear to be absolutely sure
+        window.localStorage.removeItem("vdc_cognito_tokens");
+        // Clear the logout flag
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem("vdc_logout_flag");
+        }
+        // Remove the force parameter from URL after a brief delay
+        if (router.query.force === "true") {
+          setTimeout(() => {
+            const newQuery = { ...router.query };
+            delete newQuery.force;
+            router.replace({ pathname: router.pathname, query: newQuery }, undefined, { shallow: true });
+          }, 50);
+        }
+        console.log("[Login Page] Tokens cleared, showing login page");
+        // CRITICAL: Return early to prevent any redirect check
+        return;
+      } catch (e) {
+        console.error("Error clearing tokens on force logout:", e);
+        // Continue to show login page even on error
+        return;
+      }
+    }
+    
+    // Only check if logged in if we're NOT forcing a logout
+    // Double-check that force is not set and logout flag doesn't exist
+    if (!isForcedLogout) {
+      try {
+        const { getCurrentUser, isLoggedIn } = require("@/lib/life_sciences_app_lib/auth");
+        const loggedIn = isLoggedIn && isLoggedIn();
+        console.log("[Login Page] Checking login status:", { loggedIn });
+        
+        if (loggedIn) {
+          const user = getCurrentUser();
+          console.log("[Login Page] User found, redirecting:", user);
+          if (user) {
+            // User is already logged in - redirect to appropriate page
+            const returnTo = router.query.returnTo || 
+                           (user.role === "Approver" ? "/life-sciences/app/approval/approvals" : "/life-sciences/app");
+            router.replace(returnTo);
+          }
+        }
+      } catch (e) {
+        console.error("[Login Page] Error checking login:", e);
+        // Auth functions not available or error - continue to show login page
+      }
+    }
+  }, [router.isReady, router.query.force]);
 
   // Handle OAuth callback
   useEffect(() => {
@@ -50,6 +125,7 @@ export default function ProductionLoginPage() {
     // If Cognito sent an OAuth error
     if (oauthErr) {
       console.error("OAuth error:", oauthErr, error_description);
+      setApproverMfaVisible(null); // Clear MFA box on error
       return;
     }
 
@@ -60,6 +136,35 @@ export default function ProductionLoginPage() {
     }
   }, [router.isReady, router.query]);
 
+  // Listen for successful login from popup window
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function handleMessage(event) {
+      // Verify origin for security
+      if (event.origin !== window.location.origin) return;
+
+      if (event.data?.type === "VDC_LOGIN_SUCCESS") {
+        // Clear sticky MFA box when login succeeds
+        setApproverMfaVisible(null);
+        sessionStorage.removeItem("vdc_approver_mfa_needed");
+        sessionStorage.removeItem("vdc_selected_user");
+        
+        // If callback provided a returnTo, redirect there
+        // Otherwise, the callback will handle redirect in the popup
+        if (event.data?.returnTo) {
+          // Small delay to ensure popup closes first
+          setTimeout(() => {
+            window.location.href = event.data.returnTo;
+          }, 500);
+        }
+      }
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
   function copyToClipboard(text, fieldName) {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedField(fieldName);
@@ -67,12 +172,21 @@ export default function ProductionLoginPage() {
     });
   }
 
-  function handleUserSelect(userKey) {
+  function handleUserSelect(userKey, openCognito = true) {
     const user = USER_CREDENTIALS[userKey];
-    
+
     // Store selected user info for reference (not for auto-fill per GxP)
     if (typeof window !== "undefined") {
       sessionStorage.setItem("vdc_selected_user", userKey);
+      // Store MFA flag (used by callback / other flows)
+      if (user.requiresMFA) {
+        sessionStorage.setItem("vdc_approver_mfa_needed", "true");
+      }
+    }
+    
+    // Only proceed with Cognito login if explicitly requested
+    if (!openCognito) {
+      return;
     }
     
     // Build Cognito login URL
@@ -85,12 +199,101 @@ export default function ProductionLoginPage() {
       scope: CONFIG.scopes.join(" "),
       redirect_uri: redirectUri,
       state: returnTo,
+      login_hint: user.email, // Hint to Cognito which email to use (helps with autofill)
+      prompt: "login", // Force Cognito to show login page even if user has active session
     });
     
-    const cognitoUrl = `${CONFIG.cognitoDomain}/oauth2/authorize?${params.toString()}`;
+    // Add timestamp to URL to make it unique and prevent Cognito from using cached session
+    const timestamp = Date.now();
+    const cognitoUrl = `${CONFIG.cognitoDomain}/oauth2/authorize?${params.toString()}&_t=${timestamp}`;
     
-    // Redirect to Cognito hosted UI
-    window.location.href = cognitoUrl;
+    // Show prominent MFA & credentials for this user in the sticky panel
+    setApproverMfaVisible(userKey);
+    
+    // First, try to clear Cognito session by opening logout in hidden iframe
+    // This helps prevent Cognito from auto-logging in with previous session
+    const clearCognitoSession = () => {
+      return new Promise((resolve) => {
+        // For localhost, skip Cognito logout (may not be registered)
+        const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+        if (isLocalhost) {
+          resolve();
+          return;
+        }
+        
+        try {
+          const logoutUrl = `${CONFIG.cognitoDomain}/logout?` +
+            `client_id=${CONFIG.clientId}&` +
+            `logout_uri=${encodeURIComponent(window.location.origin + "/life-sciences/app/login")}`;
+          
+          // Create hidden iframe to clear Cognito session
+          const iframe = document.createElement("iframe");
+          iframe.style.display = "none";
+          iframe.src = logoutUrl;
+          document.body.appendChild(iframe);
+          
+          // Wait a bit for logout to complete, then remove iframe
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+            resolve();
+          }, 1000);
+        } catch (e) {
+          console.warn("Could not clear Cognito session:", e);
+          resolve(); // Continue anyway
+        }
+      });
+    };
+    
+    // Clear session, then open login popup
+    clearCognitoSession().then(() => {
+      // Open in new window/tab - user can see MFA codes and credentials on original page
+      // Add a timestamp to the window name to prevent browser from reusing the same window
+      const windowName = `CognitoLogin_${Date.now()}`;
+      const cognitoWindow = window.open(
+        cognitoUrl,
+        windowName,
+        "width=600,height=700,scrollbars=yes,resizable=yes"
+      );
+      
+      // Focus on new window but keep original page visible
+      if (cognitoWindow) {
+        // Don't focus immediately - let user see the sticky MFA box first
+        setTimeout(() => {
+          cognitoWindow.focus();
+        }, 1000);
+        
+        // Monitor when popup closes or navigates away (login success)
+        const checkClosed = setInterval(() => {
+          if (cognitoWindow.closed) {
+            clearInterval(checkClosed);
+            setApproverMfaVisible(null);
+            sessionStorage.removeItem("vdc_approver_mfa_needed");
+            sessionStorage.removeItem("vdc_selected_user");
+          } else {
+            // Check if popup has navigated to callback (login success)
+            try {
+              const popupUrl = cognitoWindow.location.href;
+              if (popupUrl && popupUrl.includes("/callback")) {
+                clearInterval(checkClosed);
+                // Don't clear MFA box yet - wait for callback to complete
+                // The callback will send a message to close it
+              }
+            } catch (e) {
+              // Cross-origin error - popup is on Cognito domain, can't access
+              // This is normal, continue checking
+            }
+          }
+        }, 500);
+      } else {
+        // If popup blocked, fall back to same window redirect with warning
+        const proceed = confirm("Popup blocked. If you proceed, this page will redirect and you'll need to open this login page in another tab to see MFA codes.\n\nClick OK to proceed, or Cancel to allow popups and try again.");
+        if (proceed) {
+          window.location.href = cognitoUrl;
+        } else {
+          setApproverMfaVisible(null); // Clear if cancelled
+        }
+      }
+    });
   }
 
   return (
@@ -101,6 +304,70 @@ export default function ProductionLoginPage() {
       </Head>
 
       <div style={styles.page}>
+        {/* Sticky MFA & Credentials Display (shown when login window is open for any user) */}
+        {approverMfaVisible && (
+          <div style={styles.stickyMfaContainer}>
+            <div style={styles.stickyMfaBox}>
+              <div style={styles.stickyMfaHeader}>
+                <div style={styles.stickyMfaTitle}>
+                  🔐 MFA Code for {USER_CREDENTIALS[approverMfaVisible].displayName}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setApproverMfaVisible(null)}
+                  style={styles.stickyMfaClose}
+                  title="Close"
+                >
+                  ×
+                </button>
+              </div>
+              <div style={styles.stickyMfaContent}>
+                <div style={styles.stickyMfaEmailWarning}>
+                  <strong>⚠️ Verify Email in Cognito Popup:</strong><br />
+                  Expected: <code style={styles.stickyMfaEmailCode}>{USER_CREDENTIALS[approverMfaVisible].email}</code><br />
+                  <small>If the Cognito popup shows a different email, clear it and type the correct one above.</small>
+                </div>
+                {/* Credentials for this role (email + password) */}
+                <div style={styles.credentialsSection}>
+                  <div style={styles.credentialField}>
+                    <div style={styles.fieldLabel}>Email:</div>
+                    <div style={styles.fieldValue}>
+                      <code style={styles.code}>{USER_CREDENTIALS[approverMfaVisible].email}</code>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(USER_CREDENTIALS[approverMfaVisible].email, `${approverMfaVisible}-email`)}
+                        style={styles.copyButton}
+                        title="Copy email to clipboard"
+                      >
+                        {copiedField === `${approverMfaVisible}-email` ? "✓" : "📋"}
+                      </button>
+                    </div>
+                  </div>
+                  <div style={styles.credentialField}>
+                    <div style={styles.fieldLabel}>Password:</div>
+                    <div style={styles.fieldValue}>
+                      <code style={styles.code}>{USER_CREDENTIALS[approverMfaVisible].password}</code>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(USER_CREDENTIALS[approverMfaVisible].password, `${approverMfaVisible}-password`)}
+                        style={styles.copyButton}
+                        title="Copy password to clipboard"
+                      >
+                        {copiedField === `${approverMfaVisible}-password` ? "✓" : "📋"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <TOTPGenerator email={USER_CREDENTIALS[approverMfaVisible].email} />
+                <div style={styles.stickyMfaInstructions}>
+                  <strong>Keep this page open!</strong><br />
+                  Copy the email, password, and the MFA code above when Cognito asks for them during login.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Top header */}
         <header style={styles.topHeader}>
           <div style={styles.headerContainer}>
@@ -142,228 +409,57 @@ export default function ProductionLoginPage() {
               </div>
             </div>
 
-            {/* User Selection Notice */}
+            {/* User Selection Notice with Role Buttons */}
             <div style={styles.noticeBox}>
               <div style={styles.noticeTitle}>🔐 Authorized Users Only</div>
               <div style={styles.noticeText}>
-                <strong>Only the following four user accounts are authorized to access this system:</strong>
+                <strong>Only the following four user accounts are authorized to access this system.</strong><br />
+                Select a role below to open the Cognito login page and show credentials + MFA for that role in the top-right panel.
               </div>
-              <ul style={styles.userList}>
-                <li><strong>Submitter 1</strong> - williamoconnellpmp+submitter1@gmail.com</li>
-                <li><strong>Submitter 2</strong> - williamoconnellpmp+submitter2@gmail.com</li>
-                <li><strong>Approver 1</strong> - williamoconnellpmp+approver1@gmail.com (MFA Required)</li>
-                <li><strong>Approver 2</strong> - williamoconnellpmp+approver2@gmail.com (MFA Required)</li>
-              </ul>
+              <div style={styles.roleButtonsContainer}>
+                <button
+                  type="button"
+                  onClick={() => handleUserSelect("submitter1", true)}
+                  style={{
+                    ...styles.roleButton,
+                    ...(approverMfaVisible === "submitter1" ? styles.roleButtonActive : {})
+                  }}
+                >
+                  Submitter 1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUserSelect("submitter2", true)}
+                  style={{
+                    ...styles.roleButton,
+                    ...(approverMfaVisible === "submitter2" ? styles.roleButtonActive : {})
+                  }}
+                >
+                  Submitter 2
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUserSelect("approver1", true)}
+                  style={{
+                    ...styles.roleButton,
+                    ...(approverMfaVisible === "approver1" ? styles.roleButtonActive : {})
+                  }}
+                >
+                  Approver 1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUserSelect("approver2", true)}
+                  style={{
+                    ...styles.roleButton,
+                    ...(approverMfaVisible === "approver2" ? styles.roleButtonActive : {})
+                  }}
+                >
+                  Approver 2
+                </button>
+              </div>
               <div style={styles.noticeText}>
                 <strong>Your own email address will NOT work.</strong> You must use one of the four accounts listed above.
-              </div>
-            </div>
-
-            <h2 style={styles.sectionTitle}>Select Your Role</h2>
-
-            {/* Submitter Role Card */}
-            <div style={styles.roleCard}>
-              <div style={styles.roleHeader}>
-                <div style={styles.roleIcon}>📄</div>
-                <div style={styles.roleInfo}>
-                  <div style={styles.roleName}>Submitter</div>
-                  <div style={styles.roleDesc}>Submit documents for approval</div>
-                </div>
-                <div style={styles.roleArrow}>→</div>
-              </div>
-
-              {/* Submitter Credentials */}
-              <div style={styles.credentialsSection}>
-                <div style={styles.userButtons}>
-                  <button
-                    type="button"
-                    onClick={() => handleUserSelect("submitter1")}
-                    style={styles.userButton}
-                  >
-                    Login as Submitter 1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleUserSelect("submitter2")}
-                    style={styles.userButton}
-                  >
-                    Login as Submitter 2
-                  </button>
-                </div>
-
-                <div style={styles.credentialsGrid}>
-                  {/* Submitter 1 */}
-                  <div style={styles.credentialCard}>
-                    <div style={styles.credentialTitle}>Submitter 1</div>
-                    <div style={styles.credentialField}>
-                      <div style={styles.fieldLabel}>Email:</div>
-                      <div style={styles.fieldValue}>
-                        <code style={styles.code}>{USER_CREDENTIALS.submitter1.email}</code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(USER_CREDENTIALS.submitter1.email, "submitter1-email")}
-                          style={styles.copyButton}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "submitter1-email" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    </div>
-                    <div style={styles.credentialField}>
-                      <div style={styles.fieldLabel}>Password:</div>
-                      <div style={styles.fieldValue}>
-                        <code style={styles.code}>{USER_CREDENTIALS.submitter1.password}</code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(USER_CREDENTIALS.submitter1.password, "submitter1-password")}
-                          style={styles.copyButton}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "submitter1-password" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Submitter 2 */}
-                  <div style={styles.credentialCard}>
-                    <div style={styles.credentialTitle}>Submitter 2</div>
-                    <div style={styles.credentialField}>
-                      <div style={styles.fieldLabel}>Email:</div>
-                      <div style={styles.fieldValue}>
-                        <code style={styles.code}>{USER_CREDENTIALS.submitter2.email}</code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(USER_CREDENTIALS.submitter2.email, "submitter2-email")}
-                          style={styles.copyButton}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "submitter2-email" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    </div>
-                    <div style={styles.credentialField}>
-                      <div style={styles.fieldLabel}>Password:</div>
-                      <div style={styles.fieldValue}>
-                        <code style={styles.code}>{USER_CREDENTIALS.submitter2.password}</code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(USER_CREDENTIALS.submitter2.password, "submitter2-password")}
-                          style={styles.copyButton}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "submitter2-password" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Approver Role Card */}
-            <div style={styles.roleCard}>
-              <div style={styles.roleHeader}>
-                <div style={styles.roleIcon}>✓</div>
-                <div style={styles.roleInfo}>
-                  <div style={styles.roleName}>Approver</div>
-                  <div style={styles.roleDesc}>Review and approve documents (MFA Required)</div>
-                </div>
-                <div style={styles.roleArrow}>→</div>
-              </div>
-
-              {/* Approver Credentials */}
-              <div style={styles.credentialsSection}>
-                <div style={styles.userButtons}>
-                  <button
-                    type="button"
-                    onClick={() => handleUserSelect("approver1")}
-                    style={styles.userButton}
-                  >
-                    Login as Approver 1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleUserSelect("approver2")}
-                    style={styles.userButton}
-                  >
-                    Login as Approver 2
-                  </button>
-                </div>
-
-                <div style={styles.credentialsGrid}>
-                  {/* Approver 1 */}
-                  <div style={styles.credentialCard}>
-                    <div style={styles.credentialTitle}>Approver 1</div>
-                    <div style={styles.credentialField}>
-                      <div style={styles.fieldLabel}>Email:</div>
-                      <div style={styles.fieldValue}>
-                        <code style={styles.code}>{USER_CREDENTIALS.approver1.email}</code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(USER_CREDENTIALS.approver1.email, "approver1-email")}
-                          style={styles.copyButton}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "approver1-email" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    </div>
-                    <div style={styles.credentialField}>
-                      <div style={styles.fieldLabel}>Password:</div>
-                      <div style={styles.fieldValue}>
-                        <code style={styles.code}>{USER_CREDENTIALS.approver1.password}</code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(USER_CREDENTIALS.approver1.password, "approver1-password")}
-                          style={styles.copyButton}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "approver1-password" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    </div>
-                    <div style={styles.credentialField}>
-                      <TOTPGenerator email={USER_CREDENTIALS.approver1.email} />
-                    </div>
-                  </div>
-
-                  {/* Approver 2 */}
-                  <div style={styles.credentialCard}>
-                    <div style={styles.credentialTitle}>Approver 2</div>
-                    <div style={styles.credentialField}>
-                      <div style={styles.fieldLabel}>Email:</div>
-                      <div style={styles.fieldValue}>
-                        <code style={styles.code}>{USER_CREDENTIALS.approver2.email}</code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(USER_CREDENTIALS.approver2.email, "approver2-email")}
-                          style={styles.copyButton}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "approver2-email" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    </div>
-                    <div style={styles.credentialField}>
-                      <div style={styles.fieldLabel}>Password:</div>
-                      <div style={styles.fieldValue}>
-                        <code style={styles.code}>{USER_CREDENTIALS.approver2.password}</code>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(USER_CREDENTIALS.approver2.password, "approver2-password")}
-                          style={styles.copyButton}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "approver2-password" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    </div>
-                    <div style={styles.credentialField}>
-                      <TOTPGenerator email={USER_CREDENTIALS.approver2.email} />
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -371,10 +467,17 @@ export default function ProductionLoginPage() {
             <div style={styles.footerNote}>
               <div style={styles.footerTitle}>📝 Instructions:</div>
               <div style={styles.footerText}>
-                1. Click one of the four user buttons above to proceed to the Cognito login page.<br />
-                2. Copy and paste the email and password for your selected user into the Cognito login form.<br />
-                3. For Approvers, copy the MFA code from above when prompted during login.<br />
-                4. <strong>Note:</strong> Fields are not auto-populated in accordance with GxP best practices, 
+                <strong>MFA is required for all users.</strong><br /><br />
+                
+                1. Click one of the role buttons above (Submitter 1, Submitter 2, Approver 1, or Approver 2).<br />
+                2. Copy the email and password shown, then click "Sign in with Cognito".<br />
+                3. A popup window will open with the Cognito login page - <strong>keep this page open!</strong><br />
+                4. Paste the email and password into the Cognito login form.<br />
+                5. When Cognito asks for MFA, a <strong>sticky MFA code box</strong> will appear on this page (top right).<br />
+                6. Copy the 6-digit MFA code from the sticky box and paste it into Cognito.<br />
+                7. <strong>Important:</strong> Keep this page visible so you can see the MFA code - it updates every 30 seconds!<br /><br />
+                
+                <strong>Note:</strong> Fields are not auto-populated in accordance with GxP best practices, 
                 even though this demonstration violates other GxP requirements for credential display.
               </div>
             </div>
@@ -642,5 +745,180 @@ const styles = {
     fontSize: 13,
     lineHeight: 1.6,
     color: "rgba(255,255,255,0.85)",
+  },
+  stickyMfaContainer: {
+    position: "fixed",
+    top: "60px",
+    right: "20px",
+    zIndex: 1000,
+    maxWidth: 350,
+  },
+  stickyMfaBox: {
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    borderRadius: 16,
+    padding: 20,
+    boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+    border: "2px solid rgba(255,255,255,0.3)",
+  },
+  stickyMfaHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  stickyMfaTitle: {
+    fontSize: 16,
+    fontWeight: 900,
+    color: "#ffffff",
+  },
+  stickyMfaClose: {
+    background: "rgba(255,255,255,0.2)",
+    border: "1px solid rgba(255,255,255,0.3)",
+    borderRadius: "50%",
+    width: 28,
+    height: 28,
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: 900,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1,
+  },
+  stickyMfaContent: {
+    color: "#ffffff",
+  },
+  stickyMfaEmailWarning: {
+    marginBottom: 16,
+    padding: 12,
+    background: "rgba(251, 191, 36, 0.25)",
+    border: "1px solid rgba(251, 191, 36, 0.5)",
+    borderRadius: 8,
+    fontSize: 12,
+    lineHeight: 1.6,
+  },
+  stickyMfaEmailCode: {
+    fontFamily: "monospace",
+    fontSize: 11,
+    background: "rgba(0,0,0,0.3)",
+    padding: "2px 6px",
+    borderRadius: 4,
+    color: "#fef3c7",
+  },
+  stickyMfaInstructions: {
+    marginTop: 12,
+    padding: 12,
+    background: "rgba(255,255,255,0.15)",
+    borderRadius: 8,
+    fontSize: 13,
+    lineHeight: 1.5,
+  },
+  roleButtonsContainer: {
+    display: "flex",
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 16,
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
+  roleButton: {
+    padding: "10px 20px",
+    borderRadius: 8,
+    border: "1px solid rgba(91, 108, 255, 0.4)",
+    background: "rgba(91, 108, 255, 0.1)",
+    color: "#ffffff",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontSize: 14,
+    transition: "all 0.2s",
+    minWidth: 120,
+  },
+  roleButtonActive: {
+    background: "linear-gradient(90deg, rgba(91, 108, 255, 0.3), rgba(139, 92, 246, 0.3))",
+    border: "1px solid rgba(91, 108, 255, 0.6)",
+    boxShadow: "0 0 10px rgba(91, 108, 255, 0.3)",
+  },
+  selectedUserCard: {
+    marginTop: 24,
+    padding: 24,
+    borderRadius: 14,
+    background: "rgba(15, 25, 45, 0.8)",
+    border: "1px solid rgba(255,255,255,0.15)",
+    boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
+  },
+  selectedUserHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 12,
+    borderBottom: "1px solid rgba(255,255,255,0.1)",
+  },
+  selectedUserTitle: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 900,
+    color: "#ffffff",
+  },
+  selectedUserClose: {
+    background: "rgba(255,255,255,0.1)",
+    border: "1px solid rgba(255,255,255,0.2)",
+    borderRadius: "50%",
+    width: 32,
+    height: 32,
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: 900,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1,
+  },
+  selectedUserCredentials: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+  },
+  selectedUserField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  selectedUserLabel: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "rgba(255,255,255,0.8)",
+  },
+  selectedUserValue: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  selectedUserCode: {
+    flex: 1,
+    padding: "10px 14px",
+    borderRadius: 8,
+    background: "rgba(0, 0, 0, 0.4)",
+    border: "1px solid rgba(255,255,255,0.15)",
+    color: "#5b6cff",
+    fontFamily: "monospace",
+    fontSize: 14,
+    wordBreak: "break-all",
+  },
+  loginButton: {
+    width: "100%",
+    padding: "16px 24px",
+    borderRadius: 12,
+    border: "none",
+    background: "linear-gradient(90deg, rgba(91, 108, 255, 0.8), rgba(139, 92, 246, 0.8))",
+    color: "#ffffff",
+    fontWeight: 900,
+    cursor: "pointer",
+    fontSize: 16,
+    marginTop: 8,
+    transition: "all 0.2s",
+    boxShadow: "0 4px 12px rgba(91, 108, 255, 0.3)",
   },
 };

@@ -73,6 +73,26 @@ Resources:
         IgnorePublicAcls: true
         BlockPublicPolicy: true
         RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - HEAD
+            AllowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:8080"
+              - "https://williamoconnellpmp.com"
+              - "https://*.vercel.app"
+            ExposeHeaders:
+              - ETag
+              - x-amz-server-side-encryption
+              - x-amz-request-id
+              - x-amz-id-2
+            MaxAge: 3600
 
   VdcDocsBucketPolicy:
     Type: AWS::S3::BucketPolicy

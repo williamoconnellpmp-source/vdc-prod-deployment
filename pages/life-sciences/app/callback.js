@@ -51,6 +51,29 @@ export default function OAuthCallback() {
           throw new Error("Failed to extract user information from token");
         }
 
+        // Validate that the logged-in user matches the selected user (if one was selected)
+        const selectedUserKey = typeof window !== "undefined" ? window.sessionStorage.getItem("vdc_selected_user") : null;
+        if (selectedUserKey) {
+          // Expected emails for each user key
+          const expectedEmails = {
+            submitter1: "williamoconnellpmp+submitter1@gmail.com",
+            submitter2: "williamoconnellpmp+submitter2@gmail.com",
+            approver1: "williamoconnellpmp+approver1@gmail.com",
+            approver2: "williamoconnellpmp+approver2@gmail.com",
+          };
+          
+          const expectedEmail = expectedEmails[selectedUserKey];
+          if (expectedEmail && expectedEmail !== user.email) {
+            console.error(`[Callback] User mismatch! Expected ${expectedEmail}, got ${user.email}`);
+            // Clear tokens and redirect back to login with error
+            const { clearTokens } = require("@/lib/life_sciences_app_lib/auth");
+            clearTokens();
+            throw new Error(`You were logged in as ${user.email}, but you selected a different user. Please log out from Cognito and try again with the correct account.`);
+          } else if (expectedEmail) {
+            console.log(`[Callback] User match confirmed: ${user.email}`);
+          }
+        }
+
         setStatus("Login successful! Redirecting...");
 
         // Check user role from token and redirect accordingly
@@ -67,16 +90,66 @@ export default function OAuthCallback() {
           // Submitters go to Overview
           returnTo = "/life-sciences/app";
         }
+
+        // Close login popup window if this callback is in a popup
+        // Also notify parent window to clear sticky MFA box
+        if (typeof window !== "undefined") {
+          // Check if we're in a popup window
+          if (window.opener && !window.opener.closed) {
+            // We're in a popup - notify parent to clear MFA box and redirect
+            try {
+              const selectedUser = sessionStorage.getItem("vdc_selected_user");
+              window.opener.postMessage({ 
+                type: "VDC_LOGIN_SUCCESS", 
+                userKey: selectedUser,
+                returnTo: returnTo
+              }, window.location.origin);
+              
+              // Clear session storage in popup
+              sessionStorage.removeItem("vdc_approver_mfa_needed");
+              sessionStorage.removeItem("vdc_selected_user");
+            } catch (e) {
+              console.log("Could not notify parent window:", e);
+            }
+          } else {
+            // We're in the main window - clear MFA box from sessionStorage
+            sessionStorage.removeItem("vdc_approver_mfa_needed");
+            sessionStorage.removeItem("vdc_selected_user");
+          }
+        }
         
-        // Small delay to show success message
+        // Small delay to show success message, then redirect
         setTimeout(() => {
-          router.replace(returnTo);
+          // If in popup, redirect parent and close popup
+          if (window.opener && !window.opener.closed) {
+            try {
+              // Redirect parent window to the app
+              window.opener.location.href = returnTo;
+              // Small delay to ensure redirect starts, then close popup
+              setTimeout(() => {
+                window.close();
+              }, 300);
+            } catch (e) {
+              // If we can't access opener (cross-origin), just close popup
+              window.close();
+            }
+          } else {
+            // Normal redirect in main window
+            router.replace(returnTo);
+          }
         }, 500);
 
       } catch (err) {
         console.error("OAuth callback error:", err);
-        setError(err.message);
-        setStatus("Authentication failed");
+        
+        // If it's a user mismatch error, provide a helpful message with logout option
+        if (err.message && err.message.includes("but you selected a different user")) {
+          setError(err.message);
+          setStatus("User mismatch detected");
+        } else {
+          setError(err.message);
+          setStatus("Authentication failed");
+        }
       }
     }
 
@@ -107,20 +180,68 @@ export default function OAuthCallback() {
           <p style={{ color: "#94a3b8", marginBottom: "2rem" }}>
             {error}
           </p>
-          <button
-            onClick={() => router.push("/life-sciences/app/login")}
-            style={{
-              padding: "0.75rem 1.5rem",
-              backgroundColor: "#3b82f6",
-              color: "#fff",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "1rem"
-            }}
-          >
-            Try Again
-          </button>
+          {error && error.includes("but you selected a different user") ? (
+            <>
+              <p style={{ color: "#fbbf24", marginBottom: "1rem", fontSize: "0.9rem" }}>
+                Redirecting to Cognito logout in 3 seconds... Or click below to go to login page.
+              </p>
+              <button
+                onClick={() => {
+                  const { CONFIG } = require("@/lib/life_sciences_app_lib/config");
+                  const { clearTokens } = require("@/lib/life_sciences_app_lib/auth");
+                  clearTokens();
+                  window.location.href = "/life-sciences/app/login?force=true";
+                }}
+                style={{
+                  padding: "0.75rem 1.5rem",
+                  backgroundColor: "#3b82f6",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "1rem",
+                  marginRight: "0.5rem"
+                }}
+              >
+                Go to Login Page
+              </button>
+              <button
+                onClick={() => {
+                  const { CONFIG } = require("@/lib/life_sciences_app_lib/config");
+                  const cognitoLogoutUrl = `${CONFIG.cognitoDomain}/logout?` +
+                    `client_id=${CONFIG.clientId}&` +
+                    `logout_uri=${encodeURIComponent(window.location.origin + "/life-sciences/app/login?force=true")}`;
+                  window.location.href = cognitoLogoutUrl;
+                }}
+                style={{
+                  padding: "0.75rem 1.5rem",
+                  backgroundColor: "#ef4444",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "1rem"
+                }}
+              >
+                Logout from Cognito
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => router.push("/life-sciences/app/login")}
+              style={{
+                padding: "0.75rem 1.5rem",
+                backgroundColor: "#3b82f6",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "1rem"
+              }}
+            >
+              Try Again
+            </button>
+          )}
         </div>
       </div>
     );

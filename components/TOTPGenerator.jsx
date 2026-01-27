@@ -4,11 +4,14 @@
 import { useState, useEffect } from 'react';
 import { generateSync } from 'otplib';
 
-// TOTP secrets for demo accounts (these would be the actual secrets from Cognito MFA setup)
-// Base32 encoded secrets - must be at least 26 characters to decode to 16+ bytes
+// TOTP secrets for demo accounts - Actual secrets from Cognito MFA enrollment
+// Base32 encoded secrets from Cognito MFA setup (2026-01-26)
+// These are the REAL secrets that match Cognito's enrolled MFA devices
 const DEMO_TOTP_SECRETS = {
-  'williamoconnellpmp+approver1@gmail.com': 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
-  'williamoconnellpmp+approver2@gmail.com': 'MJSWG3DPEBUW23DPMJSWG3DPEBUW23DP'
+  'williamoconnellpmp+submitter1@gmail.com': '2CLDKWW5T7YNDM3SUEEUKUYMENBU7P72SW7VQFONBRX6WMM7VWGA',
+  'williamoconnellpmp+submitter2@gmail.com': 'BVV4RPSDDMTOEKFDHUIOKC4M2JY4SSUDX73RMFRDJ57V6AX4T3SA',
+  'williamoconnellpmp+approver1@gmail.com': '4AIKZWZAKWPIUZIQWWHY5UVW67K7J2UCDKORQ54UBARZLC7QUMBA',
+  'williamoconnellpmp+approver2@gmail.com': 'A6QQFOCIIN5KKFBPW2EBNCTQAKBAK6BGUFWWWP3A2FKCHY6FYU6Q'
 };
 
 export default function TOTPGenerator({ email }) {
@@ -23,11 +26,21 @@ export default function TOTPGenerator({ email }) {
 
     const updateCode = () => {
       try {
-        const newCode = generateSync({ secret: secret });
-        if (newCode && typeof newCode === 'string') {
+        // Generate TOTP code with Cognito-compatible settings
+        // Cognito uses: 6 digits, 30-second period, SHA-1 algorithm, Base32 encoding
+        const newCode = generateSync({
+          secret: secret,
+          digits: 6,
+          step: 30,
+          algorithm: 'sha1',
+          encoding: 'base32'
+        });
+        
+        if (newCode && typeof newCode === 'string' && newCode.length === 6) {
           setCode(newCode);
         } else {
           setCode('------');
+          console.error('Invalid TOTP code generated:', newCode);
         }
         
         // Calculate time left until next code

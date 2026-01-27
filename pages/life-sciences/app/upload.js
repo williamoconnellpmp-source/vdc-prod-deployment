@@ -130,7 +130,21 @@ export default function UploadPage() {
         window.location.href = "/life-sciences/app";
       }, 700);
     } catch (err) {
-      setMessage({ type: "error", text: err?.message || "Upload failed. Please try again." });
+      // Provide more detailed error information
+      let errorMessage = "Upload failed. Please try again.";
+      
+      if (err?.message) {
+        errorMessage = err.message;
+      } else if (err instanceof TypeError && err.message.includes("fetch")) {
+        errorMessage = `Network error: ${err.message}. Check your internet connection and ensure the API endpoint is accessible.`;
+      } else if (err?.status) {
+        errorMessage = `API error (${err.status}): ${err.message || "Request failed"}`;
+      }
+      
+      // Log full error for debugging
+      console.error("Upload error:", err);
+      
+      setMessage({ type: "error", text: errorMessage });
     } finally {
       setSubmitting(false);
     }
