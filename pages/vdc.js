@@ -1,8 +1,8 @@
 import Head from "next/head";
 import Link from "next/link";
 
-// Always start at demo-login. After login we route by role.
-const VDC_LOGIN_URL = "/life-sciences/app/demo-login?returnTo=%2Flife-sciences%2Fapp";
+// Point to the new production login page with MFA support
+const VDC_LOGIN_URL = "/life-sciences/app/login/?returnTo=%2Flife-sciences%2Fapp";
 
 export default function VDCDemoPage() {
   return (
