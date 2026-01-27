@@ -83,10 +83,11 @@ Resources:
               - POST
               - HEAD
             AllowedOrigins:
+              - "https://vdc-mfa-demo.vercel.app"
+              - "https://vdc-prod.vercel.app"
+              - "https://williamoconnellpmp.com"
               - "http://localhost:3000"
               - "http://localhost:8080"
-              - "https://williamoconnellpmp.com"
-              - "https://*.vercel.app"
             ExposeHeaders:
               - ETag
               - x-amz-server-side-encryption
