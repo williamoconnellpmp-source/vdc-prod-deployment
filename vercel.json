@@ -1,0 +1,26 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "out",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/life-sciences/app/callback",
+      "destination": "/life-sciences/app/callback/index.html"
+    },
+    {
+      "source": "/life-sciences/app/callback/:path*",
+      "destination": "/life-sciences/app/callback/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    }
+  ]
+}

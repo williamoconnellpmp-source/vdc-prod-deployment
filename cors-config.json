@@ -1,0 +1,19 @@
+{
+  "AllowOrigins": [
+    "http://localhost:8080",
+    "http://localhost:3000",
+    "https://vdc-prod.vercel.app",
+    "https://williamoconnellpmp.com"
+  ],
+  "AllowMethods": [
+    "GET",
+    "POST",
+    "OPTIONS"
+  ],
+  "AllowHeaders": [
+    "authorization",
+    "content-type"
+  ],
+  "AllowCredentials": true,
+  "MaxAge": 3600
+}
