@@ -387,8 +387,8 @@ export default function ProductionLoginPage() {
 
         <div style={styles.centerWrap}>
           <div style={styles.card}>
-            <h1 style={styles.h1}>VDC Production Login</h1>
-            <p style={styles.subtitle}>Validated Document Control System</p>
+            <h1 style={styles.h1}>VDC Production Login (MFA Demo)</h1>
+            <p style={styles.subtitle}>Validated Document Control System – Cognito + MFA test build</p>
 
             {/* GxP Disclaimer */}
             <div style={styles.disclaimerBox}>
