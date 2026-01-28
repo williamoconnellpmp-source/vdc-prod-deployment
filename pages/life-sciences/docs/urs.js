@@ -317,14 +317,14 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL allow Approvers to download and review documents via controlled copy (presigned S3 URL with 5-minute expiration) before making approval decision.
                     <div className="reqRationale"><strong>Rationale:</strong> Document review capability per workflow requirements. Short-lived presigned URLs enhance security per 21 CFR Part 11.10(b).</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> DownloadLambda generates presigned S3 URL with ExpiresIn=300 (5 minutes) in <code>cloudformation/prod/vdc-prod-app.yaml</code> DownloadLambda configuration. Frontend <code>pages/life-sciences/app/approval/[id].js</code> openControlledCopy() calls GET /documents/{id}/download and opens URL in new window.</div>
+                    <div className="reqImplementation"><strong>Implementation:</strong> DownloadLambda generates presigned S3 URL with ExpiresIn=300 (5 minutes) in <code>cloudformation/prod/vdc-prod-app.yaml</code> DownloadLambda configuration. Frontend <code>pages/life-sciences/app/approval/[id].js</code> openControlledCopy() calls GET /documents/:id/download and opens URL in new window.</div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
                 <div className="reqRow">
                   <div className="reqId">URS-APPROVE-004</div>
                   <div className="reqDesc">
-                    <strong>Requirement:</strong> The system SHALL provide Approve action (POST /approvals/{documentId}/approve) that requires MFA-authenticated session and Approver role.
+                    <strong>Requirement:</strong> The system SHALL provide Approve action (POST /approvals/:id/approve) that requires MFA-authenticated session and Approver role.
                     <div className="reqRationale"><strong>Rationale:</strong> Electronic signature via MFA-authenticated approval per 21 CFR Part 11.10(g) and 11.50. Approval action represents electronic signature with meaning equivalent to handwritten signature.</div>
                     <div className="reqImplementation"><strong>Implementation:</strong> ApproveLambda validates user has "Approver" group in cognito:groups claim. ENFORCE_APPROVER_MFA environment variable enables MFA validation. Frontend <code>pages/life-sciences/app/approval/[id].js</code> handleApprove() calls API endpoint. Approval creates audit record and updates document status to "APPROVED".</div>
                   </div>
@@ -333,7 +333,7 @@ export default function URSPage() {
                 <div className="reqRow">
                   <div className="reqId">URS-APPROVE-005</div>
                   <div className="reqDesc">
-                    <strong>Requirement:</strong> The system SHALL provide Reject action (POST /approvals/{documentId}/reject) that requires MFA-authenticated session, Approver role, and mandatory rejection reason.
+                    <strong>Requirement:</strong> The system SHALL provide Reject action (POST /approvals/:id/reject) that requires MFA-authenticated session, Approver role, and mandatory rejection reason.
                     <div className="reqRationale"><strong>Rationale:</strong> Rejection with reason provides audit trail justification per 21 CFR Part 11.10(e). Rejection reason recorded in audit trail for FDA inspection.</div>
                     <div className="reqImplementation"><strong>Implementation:</strong> RejectLambda validates Approver role and requires comment field in request body. Frontend <code>pages/life-sciences/app/approval/[id].js</code> handleReject() validates rejectionComment.trim() is not empty before API call. Rejection reason stored in audit trail details.comment field. Document status updated to "REJECTED".</div>
                   </div>
@@ -423,7 +423,7 @@ export default function URSPage() {
                 <div className="reqRow">
                   <div className="reqId">URS-AUDIT-007</div>
                   <div className="reqDesc">
-                    <strong>Requirement:</strong> The system SHALL provide audit trail retrieval capability via GET /documents/{documentId}/audit endpoint, returning events sorted chronologically.
+                    <strong>Requirement:</strong> The system SHALL provide audit trail retrieval capability via GET /documents/:id/audit endpoint, returning events sorted chronologically.
                     <div className="reqRationale"><strong>Rationale:</strong> Audit trail inspection capability per 21 CFR Part 11.10(e) and FDA inspection requirements. Enables retrieval of complete document history.</div>
                     <div className="reqImplementation"><strong>Implementation:</strong> DocumentAuditLambda queries VdcAuditTable by docId (documentId) and returns events array. Frontend <code>pages/life-sciences/app/documents/[id].js</code> displays audit trail in FDA-ready format matching Overview page example: "timestamp | action | Actor: name". Events sorted by timestamp (oldest first).</div>
                   </div>
