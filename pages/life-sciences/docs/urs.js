@@ -481,7 +481,7 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL create electronic signature records for approval actions with signatureMeaning "APPROVE", including approver identity from MFA-authenticated JWT token.
                     <div className="reqRationale"><strong>Rationale:</strong> Electronic signature for approval per 21 CFR Part 11.50. MFA-authenticated session provides two-factor authentication equivalent to handwritten signature.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> ApproveLambda creates electronic signature record with signerEmail, signerUsername from JWT claims, signatureMeaning="APPROVE", timestampUtc, and documentId. Signature linked to document via pk="DOC#{documentId}".</div>
+                    <div className="reqImplementation"><strong>Implementation:</strong> ApproveLambda creates electronic signature record with signerEmail, signerUsername from JWT claims, signatureMeaning="APPROVE", timestampUtc, and documentId. Signature linked to document via pk="DOC#&lbrace;documentId&rbrace;".</div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
