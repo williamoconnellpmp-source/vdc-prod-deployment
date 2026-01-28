@@ -17,6 +17,31 @@ function formatActor(actor) {
   return actor;
 }
 
+// Friendly label for submitter/owner based on known demo email patterns
+function formatSubmittedBy(doc, fallbackLabel = "Submitter") {
+  if (!doc) return "—";
+  const email =
+    doc?.ownerEmail ||
+    doc?.submittedByEmail ||
+    (typeof doc?.submittedBy === "string" && doc.submittedBy.includes("@") ? doc.submittedBy : null);
+
+  if (email) {
+    const lower = email.toLowerCase();
+    if (lower.includes("submitter1")) return "Submitter 1";
+    if (lower.includes("submitter2")) return "Submitter 2";
+    if (lower.includes("approver1")) return "Approver 1";
+    if (lower.includes("approver2")) return "Approver 2";
+    return email;
+  }
+
+  // Hide raw UUID-style IDs and just show a neutral role label
+  if (typeof doc?.submittedBy === "string" && doc.submittedBy.length > 30 && !doc.submittedBy.includes("@")) {
+    return fallbackLabel;
+  }
+
+  return doc?.submittedBy || "—";
+}
+
 function formatAction(eventType, details) {
   if (!eventType) return "—";
   
@@ -138,22 +163,13 @@ export default function DocumentDetailPage() {
   // Get document owner (prioritize email over UUID)
   const documentOwner = useMemo(() => {
     if (!doc) return "—";
-    const email = doc?.ownerEmail || doc?.submittedByEmail;
-    const displayName = doc?.ownerDisplayName || doc?.ownerName;
-    const username = doc?.ownerUsername;
-    const submittedBy = doc?.submittedBy;
-    
-    if (email) return email;
-    if (displayName) return displayName;
-    if (username) return username;
-    if (submittedBy && typeof submittedBy === "string" && submittedBy.includes("@")) return submittedBy;
-    if (submittedBy && typeof submittedBy === "string" && submittedBy.length > 30 && !submittedBy.includes("@")) return "—";
-    return submittedBy || "—";
+    // Prefer a friendly submitter label over raw IDs
+    return formatSubmittedBy(doc);
   }, [doc]);
 
   // Format audit trail in FDA-ready format
   const auditTrailText = useMemo(() => {
-    if (!doc) return "";
+  	if (!doc) return "";
 
     const documentId = doc?.documentId || id || "—";
     const title = doc?.title || doc?.filename || "—";
@@ -173,14 +189,19 @@ export default function DocumentDetailPage() {
       "EVENTS (UTC)",
     ];
 
+    // Track key actors/timestamps for summary
+    let submittedSummary = null;
+    let approvedSummary = null;
+
     // If no audit events, try to create from document metadata
     if (audit.length === 0) {
       // Add submission event from document metadata
       if (doc?.submittedAt) {
         const submitAction = "Submitted for Review";
-        const actor = documentOwner;
+        const actor = formatSubmittedBy(doc);
         const timestamp = formatUtcTimestampForAudit(doc.submittedAt);
         lines.push(`${timestamp} | ${submitAction} | Actor: ${actor}`);
+        submittedSummary = { actor, timestamp };
       }
       
       // Add status change events if available
@@ -191,11 +212,13 @@ export default function DocumentDetailPage() {
         const actor = user?.displayName || "—";
         const timestamp = formatUtcTimestampForAudit(doc.updatedAt);
         lines.push(`${timestamp} | ${rejectAction} | Actor: ${actor}`);
+        approvedSummary = { actor, timestamp, label: "Rejected" };
       } else if (doc?.status === "APPROVED" && doc?.updatedAt) {
         const approveAction = "Approved";
         const actor = user?.displayName || "—";
         const timestamp = formatUtcTimestampForAudit(doc.updatedAt);
         lines.push(`${timestamp} | ${approveAction} | Actor: ${actor}`);
+        approvedSummary = { actor, timestamp, label: "Approved" };
       }
     } else {
       // Use actual audit events
@@ -210,9 +233,17 @@ export default function DocumentDetailPage() {
           event?.submittedBy ||
           "—"
         );
-        
+
         if (timestamp && action && actor !== "—") {
           lines.push(`${timestamp} | ${action} | Actor: ${actor}`);
+
+          const et = (event?.eventType || event?.action || "").toUpperCase();
+          if (!submittedSummary && (et === "SUBMIT" || et === "SUBMITTED")) {
+            submittedSummary = { actor, timestamp };
+          }
+          if (!approvedSummary && (et === "APPROVE" || et === "APPROVED" || et === "REJECT" || et === "REJECTED")) {
+            approvedSummary = { actor, timestamp, label: et.startsWith("APPROVE") ? "Approved" : "Rejected" };
+          }
         }
       });
     }
@@ -221,6 +252,14 @@ export default function DocumentDetailPage() {
     lines.push("");
     lines.push("TECHNICAL CONTEXT");
     lines.push("----------------------------------------");
+    if (submittedSummary) {
+      lines.push(`Submitted By (UTC): ${submittedSummary.actor} at ${submittedSummary.timestamp}`);
+    }
+    if (approvedSummary) {
+      lines.push(
+        `Last Decision (UTC): ${approvedSummary.label || "Decision"} by ${approvedSummary.actor} at ${approvedSummary.timestamp}`
+      );
+    }
     lines.push(`DynamoDB Documents Table pk: "DOC#${documentId}", sk: "METADATA"`);
     lines.push(`DynamoDB Audit Table docId: "DOC#${documentId}", eventKey: "timestamp#eventId" (VDC_Audit_<EnvironmentName>)`);
     lines.push(`S3 Document Object: s3://${s3Bucket}/${s3Key}`);
