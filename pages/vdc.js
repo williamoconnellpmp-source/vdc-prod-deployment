@@ -1,8 +1,8 @@
 import Head from "next/head";
 import Link from "next/link";
 
-// Point to the new production login page with MFA support
-const VDC_LOGIN_URL = "/life-sciences/app/login/?returnTo=%2Flife-sciences%2Fapp";
+// Point to the production login page with MFA support (Cognito)
+const VDC_LOGIN_URL = "/life-sciences/app/login?returnTo=%2Flife-sciences%2Fapp";
 
 export default function VDCDemoPage() {
   return (
@@ -50,38 +50,50 @@ export default function VDCDemoPage() {
         <main className="mainContent">
           <div className="container">
             <section className="hero">
-              <h1 className="h1">Why a Validated Document Control Demo?</h1>
+              <h1 className="h1">Validated Document Control (VDC) Demo</h1>
 
               <p className="subtitle">
-                A live, serverless AWS demo illustrating GxP-capable document workflows, with a full production 21 CFR Part 11 system coming soon.
+                A live, serverless AWS implementation of a GxP-capable Validated Document Control system, including full FDA-ready documentation (URS, FS, RTM, IQ/OQ/PQ) and a production-grade identity and audit architecture.
               </p>
 
-              {/* Combined explainer + demo auth (all above CTA) */}
+              {/* Purpose + GxP context */}
               <div className="contextBox">
                 <p className="whiteText">
-                  In regulated Life Sciences environments, teams must be able to demonstrate who performed an action, when it occurred, under which role, and what controls enforced it.
+                  <strong>Purpose:</strong> In regulated Life Sciences environments, teams must be able to demonstrate who performed an action, when it occurred, under which role, and what controls enforced it. This VDC system shows how to implement those requirements on AWS using native, serverless services.
                 </p>
 
                 <p className="whiteText">
-                  This Validated Document Control (VDC) demo provides a working, non-GxP implementation designed to showcase GxP-capable architectural patterns using native AWS serverless services. The demo illustrates controlled document workflows, role-based actions, and immutable audit trail concepts in a simplified, accessible format.
+                  <strong>What this demo proves:</strong>
+                </p>
+                <ul className="bulletList">
+                  <li>Controlled document submission and approval workflows (Submitter → Approver)</li>
+                  <li>Role-based access control enforced by Amazon Cognito groups and API Gateway JWT authorizer</li>
+                  <li>Immutable audit trail for all critical actions (SUBMIT, APPROVE, REJECT, DOWNLOAD)</li>
+                  <li>Data integrity controls: SHA‑256 hashing, S3 versioning, DynamoDB + S3 WORM audit storage</li>
+                  <li>ALCOA+ implementation: Attributable, Legible, Contemporaneous, Original, Accurate, Complete, Consistent, Enduring, Available</li>
+                  <li>21 CFR Part 11 patterns for electronic records and signatures (MFA, JWT-backed identity, structured audit records)</li>
+                </ul>
+
+                <p className="whiteText">
+                  <strong>How it is GxP-capable:</strong> The application is backed by a full validation set:
+                  URS (User Requirements), FS (Functional Specification), RTM (Traceability Matrix), and IQ/OQ/PQ validation
+                  results. Every requirement is traced to implementation (AWS resources + code) and to executed test cases.
                 </p>
 
                 <p className="whiteText">
-                  <strong>Demo authentication (non-GxP)</strong>
-                </p>
-
-                <p className="whiteText" style={{ marginBottom: 0 }}>
-                  This demo uses a simplified, demo-only login model. Select a role (Submitter or Approver) and enter any user name to explore the workflow. This approach is intentionally non-GxP and is used solely to demonstrate workflow behavior and audit concepts.
+                  <strong>Authentication model:</strong> This environment uses Amazon Cognito with TOTP MFA for all users.
+                  Submitters and Approvers authenticate via the Cognito Hosted UI; JWT tokens (ID + Access) drive role detection and
+                  authorization. The legacy non‑GxP demo login has been replaced by this production‑style identity flow.
                 </p>
               </div>
 
               {/* CTA */}
               <section className="ctaSectionTop">
                 <div className="ctaTopLeft">
-                  <h2 className="ctaTitle">Want to see it in action?</h2>
+                  <h2 className="ctaTitle">Run the end‑to‑end workflow</h2>
                   <p className="ctaText">
-                    Open the demo, choose a role (Submitter or Approver),
-                    run the workflow, and log out before switching roles.
+                    Sign in with a Submitter account to upload and submit a document, then sign in as an Approver to review, approve
+                    or reject, and inspect the immutable audit trail.
                   </p>
                 </div>
 
@@ -90,16 +102,97 @@ export default function VDCDemoPage() {
                 </a>
               </section>
 
-              {/* UPDATE under CTA */}
-              <div className="updateBox">
-                <p className="whiteText" style={{ margin: 0 }}>
-                  <strong>UPDATE:</strong> A full production GxP implementation using AWS products only, including validated identity, role separation, and electronic signature controls is currently under construction and is coming soon.
+              {/* Validation docs */}
+              <div className="docsBox">
+                <h3 className="docsTitle">Validation &amp; Evidence</h3>
+                <p className="docsDesc">
+                  The VDC system includes full FDA-ready documentation showing how requirements map to architecture, code, and tests:
                 </p>
+                <div className="docsLinks">
+                  <Link href="/life-sciences/docs/urs" className="docLink">
+                    User Requirements Specification (URS)
+                  </Link>
+                  <Link href="/life-sciences/docs/functional-spec" className="docLink">
+                    Functional Specification (FS)
+                  </Link>
+                  <Link href="/life-sciences/docs/traceability-matrix" className="docLink">
+                    Requirements Traceability Matrix (RTM)
+                  </Link>
+                  <Link href="/life-sciences/docs/iq-oq-pq" className="docLink">
+                    IQ/OQ/PQ Validation Results
+                  </Link>
+                </div>
               </div>
 
-              <p className="techStack">
-                Built on AWS using API Gateway, Lambda, DynamoDB, S3, IAM, and CloudFormation.
-              </p>
+              {/* AWS Architecture Section */}
+              <div className="awsBox">
+                <h3 className="awsTitle">AWS Serverless Architecture</h3>
+                <p className="awsDesc">
+                  The production VDC system is built entirely on AWS serverless services, demonstrating how to meet GxP and 21 CFR Part 11 expectations using native cloud components:
+                </p>
+                <div className="awsGrid">
+                  <div className="awsService">
+                    <div className="awsServiceName">Amazon Cognito</div>
+                    <div className="awsServiceDesc">
+                      User authentication with TOTP MFA, password policy, Advanced Security Mode, and role separation via Cognito groups
+                      (Submitter / Approver).
+                    </div>
+                  </div>
+                  <div className="awsService">
+                    <div className="awsServiceName">Amazon API Gateway (HTTP API)</div>
+                    <div className="awsServiceDesc">
+                      JWT authorizer validates Cognito tokens on every call, enforcing TLS 1.2+ and CORS. All business logic flows through this controlled API surface.
+                    </div>
+                  </div>
+                  <div className="awsService">
+                    <div className="awsServiceName">AWS Lambda (Python)</div>
+                    <div className="awsServiceDesc">
+                      Eight Lambda functions implement upload-init, submit, approvals-pending, approve, reject, download, documents-list,
+                      and document-audit behavior with least‑privilege IAM policies.
+                    </div>
+                  </div>
+                  <div className="awsService">
+                    <div className="awsServiceName">Amazon DynamoDB</div>
+                    <div className="awsServiceDesc">
+                      Documents table stores metadata and workflow state; Audit table stores immutable audit records and electronic signature
+                      events with point‑in‑time recovery enabled.
+                    </div>
+                  </div>
+                  <div className="awsService">
+                    <div className="awsServiceName">Amazon S3</div>
+                    <div className="awsServiceDesc">
+                      Documents bucket with AES‑256 SSE, versioning, and strict public access block; WORM audit bucket with Object Lock
+                      in COMPLIANCE mode for long‑term, write‑once audit storage.
+                    </div>
+                  </div>
+                  <div className="awsService">
+                    <div className="awsServiceName">AWS IAM</div>
+                    <div className="awsServiceDesc">
+                      Fine‑grained, least‑privilege policies for each Lambda. Audit table explicitly denies UpdateItem/DeleteItem to
+                      enforce immutability.
+                    </div>
+                  </div>
+                  <div className="awsService">
+                    <div className="awsServiceName">AWS CloudFormation</div>
+                    <div className="awsServiceDesc">
+                      Infrastructure as Code templates define Cognito, API Gateway, Lambdas, DynamoDB, S3, IAM, and CloudWatch resources
+                      for reproducible, validated deployments.
+                    </div>
+                  </div>
+                  <div className="awsService">
+                    <div className="awsServiceName">Amazon CloudFront</div>
+                    <div className="awsServiceDesc">
+                      CDN fronting the static Next.js frontend, enforcing TLS and providing global, low‑latency delivery.
+                    </div>
+                  </div>
+                  <div className="awsService">
+                    <div className="awsServiceName">Amazon CloudWatch</div>
+                    <div className="awsServiceDesc">
+                      Centralized logs, metrics, and alarms for Lambda functions and API Gateway, supporting ongoing monitoring and inspection readiness.
+                    </div>
+                  </div>
+                </div>
+              </div>
             </section>
 
             <footer className="footer">
