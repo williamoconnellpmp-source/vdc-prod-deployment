@@ -32,19 +32,48 @@ function filenameFromKey(s3Key) {
 
 // Best-effort “submitted by” display (order matters)
 function pickSubmittedBy(it) {
-  return (
+  // First try display names and emails (human-readable)
+  const humanReadable =
     it?.submittedByDisplayName ||
     it?.submittedByName ||
     it?.submittedByEmail ||
-    it?.submittedBy ||
     it?.ownerDisplayName ||
     it?.ownerName ||
-    it?.ownerEmail ||
-    it?.ownerUsername ||
-    it?.ownerUserId ||
-    it?.submittedBySub ||
-    "—"
-  );
+    it?.ownerEmail;
+
+  if (humanReadable) return humanReadable;
+
+  // Then try usernames
+  const username = it?.ownerUsername;
+  if (username) return username;
+
+  // Check if submittedBy looks like an email (contains @)
+  const submittedBy = it?.submittedBy;
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.includes("@")) {
+    return submittedBy;
+  }
+
+  // Skip UUIDs (long alphanumeric strings without @) - show fallback instead
+  // UUIDs are typically 36 chars with dashes: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.length > 30 && !submittedBy.includes("@")) {
+    return "—"; // Don't show UUID
+  }
+
+  // Last resort: show submittedBy if it's short or looks like a name
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.length < 30) {
+    return submittedBy;
+  }
+
+  // Also check submittedBySub
+  const submittedBySub = it?.submittedBySub;
+  if (submittedBySub && typeof submittedBySub === "string" && submittedBySub.includes("@")) {
+    return submittedBySub;
+  }
+  if (submittedBySub && typeof submittedBySub === "string" && submittedBySub.length > 30 && !submittedBySub.includes("@")) {
+    return "—"; // Don't show UUID
+  }
+
+  return "—";
 }
 
 // Used for filtering “my submissions”
@@ -506,18 +535,6 @@ export default function SubmissionsPage() {
                               >
                                 Audit Trail
                               </Link>
-
-                              {user.role === "Approver" &&
-                              status === "SUBMITTED" ? (
-                                <Link
-                                  className="link"
-                                  href={`/life-sciences/app/approval/${encodeURIComponent(
-                                    String(id)
-                                  )}`}
-                                >
-                                  Review
-                                </Link>
-                              ) : null}
                             </div>
                           </td>
                         </tr>
