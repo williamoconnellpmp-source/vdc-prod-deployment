@@ -6,9 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { apiFetch } from "../../../../lib/life_sciences_app_lib/api";
 import { getCurrentUser, requireAuthOrRedirect, logout } from "../../../../lib/life_sciences_app_lib/auth";
-
-// Use formatUtcTimestampForAudit from utils for audit trail (ISO format)
-// Use formatUtcTimestamp from utils for display (human-readable)
+import { formatUtcTimestamp, formatUtcTimestampForAudit } from "../../../../lib/life_sciences_app_lib/utils";
 
 function formatActor(actor) {
   if (!actor) return "—";
@@ -194,7 +192,7 @@ export default function DocumentDetailPage() {
     } else {
       // Use actual audit events
       audit.forEach((event) => {
-        const timestamp = formatTimestamp(event?.timestamp || event?.timestampUtc || event?.createdAt);
+        const timestamp = formatUtcTimestampForAudit(event?.timestamp || event?.timestampUtc || event?.createdAt);
         const action = formatAction(event?.eventType || event?.action, event?.details);
         const actor = formatActor(
           event?.actorEmail ||
