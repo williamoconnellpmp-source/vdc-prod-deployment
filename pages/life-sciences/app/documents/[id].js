@@ -1,159 +1,232 @@
-// pages/life-sciences/app/approval/[id].js
+// pages/life-sciences/app/documents/[id].js
 
 import Head from "next/head";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import { apiFetch } from "../../../../lib/life_sciences_app_lib/api";
 import { getCurrentUser, requireAuthOrRedirect, logout } from "../../../../lib/life_sciences_app_lib/auth";
 
-function prettyErr(e) {
-  if (!e) return null;
-  if (typeof e === "string") return e;
-  return e?.message || "Request failed.";
+function formatTimestamp(ts) {
+  if (!ts) return "—";
+  // Convert to ISO 8601 with Z (UTC) if not already
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return ts; // Return as-is if invalid
+    return date.toISOString().replace(/\.(\d{3})Z$/, ".$1Z"); // Ensure milliseconds and Z
+  } catch {
+    return ts;
+  }
 }
 
-function roleIsApprover(role) {
-  const r = String(role || "").trim().toLowerCase();
-  return r === "approver";
+function formatActor(actor) {
+  if (!actor) return "—";
+  // Skip UUIDs (long strings without @)
+  if (typeof actor === "string" && actor.length > 30 && !actor.includes("@")) {
+    return "—";
+  }
+  return actor;
 }
 
-export default function ApprovalDetailPage() {
+function formatAction(eventType, details) {
+  if (!eventType) return "—";
+  
+  // Map event types to human-readable actions
+  const actionMap = {
+    "SUBMIT": "Submitted for Review",
+    "SUBMITTED": "Submitted for Review",
+    "APPROVE": "Approved",
+    "APPROVED": "Approved",
+    "REJECT": "Rejected",
+    "REJECTED": "Rejected",
+  };
+  
+  let action = actionMap[eventType.toUpperCase()] || eventType;
+  
+  // Add rejection reason if present
+  const reason = details?.comment || details?.reason || details?.rejectionReason;
+  if (reason && (eventType.toUpperCase() === "REJECT" || eventType.toUpperCase() === "REJECTED")) {
+    action += `: ${reason}`;
+  }
+  
+  return action;
+}
+
+export default function DocumentDetailPage() {
   const router = useRouter();
   const { id } = router.query;
 
   const [user, setUser] = useState({ displayName: "Demo User", role: "—" });
   const [doc, setDoc] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const [status, setStatus] = useState(null);
-  const [rejectionComment, setRejectionComment] = useState("");
-
-  const isApprover = roleIsApprover(user?.role);
+  const [audit, setAudit] = useState([]);
+  const [loadingDoc, setLoadingDoc] = useState(false);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [errorDoc, setErrorDoc] = useState(null);
+  const [errorAudit, setErrorAudit] = useState(null);
 
   useEffect(() => {
-    const ok = requireAuthOrRedirect(router, "/life-sciences/app/approval/approvals");
+    const ok = requireAuthOrRedirect(router, "/life-sciences/app/documents");
     if (!ok) return;
 
     const u = getCurrentUser();
     if (u?.displayName || u?.role) {
-      setUser({ displayName: u.displayName || "Demo User", role: u.role || "—" });
+      setUser({
+        displayName: u.displayName || "Demo User",
+        role: u.role || "—",
+      });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function load() {
-    setError(null);
-    setBusy(true);
-
-    try {
-      const u = getCurrentUser();
-      if (!u) throw new Error("Not signed in.");
-      if (!roleIsApprover(u.role)) throw new Error("Approve/Reject actions are restricted to Approver role in demo mode.");
-      if (!id) return;
-
-      const data = await apiFetch("/documents", { method: "GET" }, router);
-      const list = Array.isArray(data?.items) ? data.items : [];
-      const found = list.find((item) => item.documentId === id || item.id === id);
-      if (!found) throw new Error("Document not found.");
-
-      setDoc(found);
-      setStatus(null);
-    } catch (e) {
-      setError(prettyErr(e));
-      setDoc(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  // Load document
   useEffect(() => {
-    if (!id) return;
-    if (!isApprover) return;
+    if (!router.isReady || !id) return;
+
+    const load = async () => {
+      setLoadingDoc(true);
+      setErrorDoc(null);
+
+      try {
+        const data = await apiFetch("/documents", { method: "GET" }, router);
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const found = items.find((item) => item.documentId === id || item.id === id);
+        
+        if (!found) {
+          setErrorDoc("Document not found.");
+          return;
+        }
+
+        setDoc(found);
+      } catch (e) {
+        setErrorDoc(e?.message || "Failed to load document.");
+      } finally {
+        setLoadingDoc(false);
+      }
+    };
+
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isApprover]);
+  }, [router.isReady, id]);
 
-  async function openControlledCopy() {
-    setError(null);
-    setStatus("Generating controlled download link...");
+  // Load audit trail
+  useEffect(() => {
+    if (!router.isReady || !id) return;
 
-    try {
-      const u = getCurrentUser();
-      if (!u) throw new Error("Not signed in.");
-      if (!roleIsApprover(u.role)) throw new Error("Approve/Reject actions are restricted to Approver role in demo mode.");
+    const loadAudit = async () => {
+      setLoadingAudit(true);
+      setErrorAudit(null);
+      setAudit([]);
 
-      const data = await apiFetch(`/documents/${encodeURIComponent(String(id))}/download`, { method: "GET" }, router);
-      const url = data?.downloadUrl || data?.url || data?.presignedUrl;
-      if (!url) throw new Error("Download URL not returned.");
+      try {
+        const data = await apiFetch(`/documents/${encodeURIComponent(String(id))}/audit`, { method: "GET" }, router);
 
-      window.open(url, "_blank", "noopener,noreferrer");
-      setStatus(null);
-    } catch (e) {
-      setError(prettyErr(e));
-      setStatus(null);
+        // Support either {items:[...]} or {events:[...]}
+        const items = Array.isArray(data?.items)
+          ? data.items
+          : Array.isArray(data?.events)
+          ? data.events
+          : Array.isArray(data?.auditTrail)
+          ? data.auditTrail
+          : [];
+
+        // Sort by timestamp (oldest first)
+        items.sort((a, b) => {
+          const tsA = a?.timestamp || a?.timestampUtc || a?.createdAt || "";
+          const tsB = b?.timestamp || b?.timestampUtc || b?.createdAt || "";
+          return String(tsA).localeCompare(String(tsB));
+        });
+
+        setAudit(items);
+      } catch (e) {
+        setAudit([]);
+        setErrorAudit(e?.message || "Failed to load audit trail.");
+      } finally {
+        setLoadingAudit(false);
+      }
+    };
+
+    loadAudit();
+  }, [router.isReady, id]);
+
+  // Get document owner (prioritize email over UUID)
+  const documentOwner = useMemo(() => {
+    if (!doc) return "—";
+    const email = doc?.ownerEmail || doc?.submittedByEmail;
+    const displayName = doc?.ownerDisplayName || doc?.ownerName;
+    const username = doc?.ownerUsername;
+    const submittedBy = doc?.submittedBy;
+    
+    if (email) return email;
+    if (displayName) return displayName;
+    if (username) return username;
+    if (submittedBy && typeof submittedBy === "string" && submittedBy.includes("@")) return submittedBy;
+    if (submittedBy && typeof submittedBy === "string" && submittedBy.length > 30 && !submittedBy.includes("@")) return "—";
+    return submittedBy || "—";
+  }, [doc]);
+
+  // Format audit trail in FDA-ready format
+  const auditTrailText = useMemo(() => {
+    if (!doc) return "";
+
+    const lines = [
+      "AUDIT TRAIL (UTC)",
+      "----------------------------------------",
+      `Document Title: ${doc?.title || doc?.filename || "—"}`,
+      `Document ID: ${doc?.documentId || id || "—"}`,
+      `Current Status: ${(doc?.status || "—").toUpperCase()}`,
+      "",
+      "EVENTS (UTC)",
+    ];
+
+    // If no audit events, try to create from document metadata
+    if (audit.length === 0) {
+      // Add submission event from document metadata
+      if (doc?.submittedAt) {
+        const submitAction = "Submitted for Review";
+        const actor = documentOwner;
+        const timestamp = formatTimestamp(doc.submittedAt);
+        lines.push(`${timestamp} | ${submitAction} | Actor: ${actor}`);
+      }
+      
+      // Add status change events if available
+      if (doc?.status === "REJECTED" && doc?.updatedAt) {
+        const rejectAction = doc?.rejectionReason 
+          ? `Rejected: ${doc.rejectionReason}`
+          : "Rejected";
+        const actor = user?.displayName || "—";
+        const timestamp = formatTimestamp(doc.updatedAt);
+        lines.push(`${timestamp} | ${rejectAction} | Actor: ${actor}`);
+      } else if (doc?.status === "APPROVED" && doc?.updatedAt) {
+        const approveAction = "Approved";
+        const actor = user?.displayName || "—";
+        const timestamp = formatTimestamp(doc.updatedAt);
+        lines.push(`${timestamp} | ${approveAction} | Actor: ${actor}`);
+      }
+    } else {
+      // Use actual audit events
+      audit.forEach((event) => {
+        const timestamp = formatTimestamp(event?.timestamp || event?.timestampUtc || event?.createdAt);
+        const action = formatAction(event?.eventType || event?.action, event?.details);
+        const actor = formatActor(
+          event?.actorEmail ||
+          event?.actorUsername ||
+          event?.userId ||
+          event?.userEmail ||
+          event?.submittedBy ||
+          "—"
+        );
+        
+        if (timestamp && action && actor !== "—") {
+          lines.push(`${timestamp} | ${action} | Actor: ${actor}`);
+        }
+      });
     }
-  }
 
-  async function handleApprove() {
-    setError(null);
-
-    try {
-      const u = getCurrentUser();
-      if (!u) throw new Error("Not signed in.");
-      if (!roleIsApprover(u.role)) throw new Error("Approve/Reject actions are restricted to Approver role in demo mode.");
-      if (!id) throw new Error("Missing document id.");
-
-      setBusy(true);
-      setStatus("Approving...");
-
-      await apiFetch(`/approvals/${encodeURIComponent(String(id))}/approve`, { method: "POST" }, router);
-
-      router.push("/life-sciences/app/approval/approvals");
-    } catch (e) {
-      setError(prettyErr(e));
-      setStatus(null);
-      setBusy(false);
-    }
-  }
-
-  async function handleReject() {
-    setError(null);
-
-    try {
-      const u = getCurrentUser();
-      if (!u) throw new Error("Not signed in.");
-      if (!roleIsApprover(u.role)) throw new Error("Approve/Reject actions are restricted to Approver role in demo mode.");
-      if (!id) throw new Error("Missing document id.");
-
-      const comment = rejectionComment.trim();
-      if (!comment) throw new Error("Rejection reason is required.");
-
-      setBusy(true);
-      setStatus("Rejecting...");
-
-      await apiFetch(
-        `/approvals/${encodeURIComponent(String(id))}/reject`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ comment }),
-        },
-        router
-      );
-
-      router.push("/life-sciences/app/approval/approvals");
-    } catch (e) {
-      setError(prettyErr(e));
-      setStatus(null);
-      setBusy(false);
-    }
-  }
+    return lines.join("\n");
+  }, [doc, audit, id, documentOwner, user]);
 
   return (
     <>
       <Head>
-        <title>Review / Approve - VDC Demo</title>
+        <title>Document Details - VDC Demo</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
@@ -184,8 +257,8 @@ export default function ApprovalDetailPage() {
               <Link href="/life-sciences/app" className="navLink">Overview</Link>
               <Link href="/life-sciences/app/upload" className="navLink">Upload</Link>
               <Link href="/life-sciences/app/submissions" className="navLink">Submissions</Link>
-              <Link href="/life-sciences/app/documents" className="navLink">Documents</Link>
-              <Link href="/life-sciences/app/approval/approvals" className="navLink active">Pending Approvals</Link>
+              <Link href="/life-sciences/app/documents" className="navLink active">Documents</Link>
+              <Link href="/life-sciences/app/approval/approvals" className="navLink">Pending Approvals</Link>
             </div>
 
             <div className="navRight">
@@ -197,26 +270,24 @@ export default function ApprovalDetailPage() {
         </div>
 
         <main className="content">
-          <h1 className="h1">Review / Approve</h1>
-          <div className="subtitle">
-            Review the controlled copy, then approve or reject. Rejection requires a reason. All timestamps are recorded in UTC.
-          </div>
+          <h1 className="h1">Document Details</h1>
+          <div className="subtitle">View document metadata and complete audit trail. All timestamps are recorded in UTC.</div>
 
-          {!isApprover ? (
+          {loadingDoc ? (
             <section className="panel">
-              <div className="callout">
-                <div className="calloutTitle">Review is restricted to Approvers</div>
-                <div className="calloutText">Switch to the Approver role, then return to the approvals queue.</div>
-                <div className="calloutLink">
-                  <Link href="/life-sciences/app/approval/approvals">Back to Pending Approvals</Link>
-                </div>
+              <div className="loading">Loading document...</div>
+            </section>
+          ) : errorDoc ? (
+            <section className="panel">
+              <div className="errorBox">
+                <strong>Error:</strong> {errorDoc}
               </div>
             </section>
-          ) : (
+          ) : doc ? (
             <>
               <section className="panel">
-                <div className="panelTitle">Document summary</div>
-                <div className="panelSub">This metadata is displayed for audit-friendly review. This page is read-only.</div>
+                <div className="panelTitle">Document Summary</div>
+                <div className="panelSub">This metadata is displayed for audit-friendly review.</div>
 
                 <div className="summaryGrid">
                   <div className="summaryCard">
@@ -227,94 +298,42 @@ export default function ApprovalDetailPage() {
 
                   <div className="summaryCard">
                     <div className="label">Submitted by</div>
-                    <div className="value">
-                      {(() => {
-                        // Prioritize human-readable fields over UUIDs
-                        const email = doc?.ownerEmail || doc?.submittedByEmail;
-                        const displayName = doc?.ownerDisplayName || doc?.ownerName;
-                        const username = doc?.ownerUsername;
-                        const submittedBy = doc?.submittedBy;
-                        
-                        // Prefer email/displayName
-                        if (email) return email;
-                        if (displayName) return displayName;
-                        if (username) return username;
-                        
-                        // If submittedBy looks like an email, use it
-                        if (submittedBy && typeof submittedBy === "string" && submittedBy.includes("@")) {
-                          return submittedBy;
-                        }
-                        
-                        // Skip UUIDs (long strings without @)
-                        if (submittedBy && typeof submittedBy === "string" && submittedBy.length > 30 && !submittedBy.includes("@")) {
-                          return "—";
-                        }
-                        
-                        return submittedBy || "—";
-                      })()}
-                    </div>
-                    <div className="muted">Submitted (UTC): {doc?.submittedAt || "—"}</div>
+                    <div className="value">{documentOwner}</div>
+                    <div className="muted">Submitted (UTC): {doc?.submittedAt ? formatTimestamp(doc.submittedAt) : "—"}</div>
                   </div>
 
                   <div className="summaryCard">
-                    <div className="label">Version under review</div>
-                    <div className="value">—</div>
-                    <div className="muted">Controlled copy required before decision</div>
+                    <div className="label">Status</div>
+                    <div className="value">{doc?.status || "—"}</div>
+                    <div className="muted">Updated (UTC): {doc?.updatedAt ? formatTimestamp(doc.updatedAt) : "—"}</div>
                   </div>
                 </div>
 
                 <div className="summaryActions">
-                  <Link href={`/life-sciences/app/documents/${encodeURIComponent(String(id || ""))}`} className="ghostBtn">
-                    View details
-                  </Link>
-
-                  <button onClick={openControlledCopy} className="ghostBtn" disabled={busy || !id} type="button">
-                    Open controlled copy
-                  </button>
-
-                  <Link href="/life-sciences/app/approval/approvals" className="textLink">
-                    Back to queue
+                  <Link href="/life-sciences/app/documents" className="ghostBtn">
+                    Back to Documents
                   </Link>
                 </div>
-
-                {status && !error ? <div className="statusBox">{status}</div> : null}
-                {error ? (
-                  <div className="errorBox">
-                    <strong>Error:</strong> {error}
-                  </div>
-                ) : null}
               </section>
 
               <section className="panel">
-                <div className="panelTitle">Decision</div>
-                <div className="panelSub">Approve does not require text. Reject requires a reason that is recorded in the audit trail.</div>
+                <div className="panelTitle">Audit Trail</div>
+                <div className="panelSub">Complete immutable audit trail showing who did what, when. This is the FDA-ready record.</div>
 
-                <div className="fieldLabel">Rejection reason (required only if rejecting)</div>
-                <textarea
-                  className="textarea"
-                  value={rejectionComment}
-                  onChange={(e) => setRejectionComment(e.target.value)}
-                  rows={4}
-                  placeholder="If rejecting, enter the reason. This is recorded in the audit trail."
-                  disabled={busy}
-                />
-
-                <div className="decisionRow">
-                  <button className="approveBtn" onClick={handleApprove} disabled={busy || !id} type="button">
-                    Approve Document
-                  </button>
-
-                  <button className="rejectBtn" onClick={handleReject} disabled={busy || !id || !rejectionComment.trim()} type="button">
-                    Reject Document
-                  </button>
-
-                  <div className="decisionMeta">
-                    Acting as: <strong>{user.displayName || "Demo User"}</strong> · UTC timestamps recorded
+                {loadingAudit ? (
+                  <div className="loading">Loading audit trail...</div>
+                ) : errorAudit ? (
+                  <div className="errorBox">
+                    <strong>Error:</strong> {errorAudit}
                   </div>
-                </div>
+                ) : (
+                  <div className="auditTrailBox">
+                    <pre className="auditTrailText">{auditTrailText || "No audit events available."}</pre>
+                  </div>
+                )}
               </section>
             </>
-          )}
+          ) : null}
         </main>
       </div>
 
@@ -444,45 +463,33 @@ export default function ApprovalDetailPage() {
           color: #fff;
         }
 
-        .textLink { text-decoration: underline; text-underline-offset: 6px; font-weight: 900; opacity: 0.9; color: #fff; }
+        .loading { padding: 12px; text-align: center; opacity: 0.9; color: #fff; }
+        .errorBox {
+          margin-top: 12px;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 80, 80, 0.45);
+          background: rgba(255, 30, 30, 0.12);
+          color: #fff;
+        }
 
-        .statusBox { margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.06); opacity: 0.95; color: #fff; }
-        .errorBox { margin-top: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255, 80, 80, 0.45); background: rgba(255, 30, 30, 0.12); color: #fff; }
-
-        .fieldLabel { margin-top: 8px; font-weight: 900; opacity: 0.95; color: #fff; }
-
-        .textarea {
-          width: 100%;
-          margin-top: 8px;
+        .auditTrailBox {
+          margin-top: 12px;
           border-radius: 14px;
           border: 1px solid rgba(255, 255, 255, 0.16);
-          background: rgba(0, 0, 0, 0.25);
-          padding: 12px;
-          color: #fff;
-          outline: none;
-          resize: vertical;
+          background: rgba(255, 255, 255, 0.95);
+          padding: 18px;
+          overflow-x: auto;
         }
 
-        .decisionRow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
-
-        .approveBtn { padding: 12px 18px; border-radius: 999px; border: none; font-weight: 950; cursor: pointer; background: linear-gradient(135deg, #22c55e, #16a34a); color: #04140b; }
-        .rejectBtn { padding: 12px 18px; border-radius: 999px; border: none; font-weight: 950; cursor: pointer; background: linear-gradient(135deg, #b94a5a, #8e2f3a); color: #fff; }
-        .approveBtn:disabled, .rejectBtn:disabled { opacity: 0.55; cursor: not-allowed; }
-
-        .decisionMeta { margin-left: auto; opacity: 0.85; font-weight: 800; color: #fff; }
-
-        .callout {
-          background: #f1f5f9;
-          border: 1px solid #cbd5e1;
-          border-radius: 12px;
-          padding: 24px 18px;
+        .auditTrailText {
+          margin: 0;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+          font-size: 14px;
+          line-height: 1.8;
           color: #0f172a;
-          font-weight: 800;
-          text-align: center;
+          white-space: pre;
         }
-        .calloutTitle { font-size: 1.18rem; font-weight: 950; margin-bottom: 6px; }
-        .calloutText { font-weight: 700; }
-        .calloutLink { margin-top: 14px; font-weight: 800; }
       `}</style>
     </>
   );
