@@ -378,6 +378,7 @@ export default function VdcOverviewPage() {
             font-size: 40px;
             font-weight: 950;
             letter-spacing: -0.02em;
+            color: #fff;
           }
 
           .grid2 {
