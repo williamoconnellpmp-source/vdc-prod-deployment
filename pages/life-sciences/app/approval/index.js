@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { apiFetch } from "../../../../lib/life_sciences_app_lib/api";
 import { getCurrentUser, requireAuthOrRedirect } from "../../../../lib/life_sciences_app_lib/auth";
+import { formatUtcTimestamp } from "../../../../lib/life_sciences_app_lib/utils";
 
 function prettyErr(e) {
 if (!e) return null;
@@ -156,7 +157,7 @@ const mapped = (items || []).map((it) => {
 const id = it?.documentId || it?.id || "";
 const title = it?.title || it?.documentName || it?.name || filenameFromItem(it);
 const owner = pickOwner(it);
-const submittedAt = formatUtc(pickSubmittedAt(it));
+const submittedAt = formatUtcTimestamp(pickSubmittedAt(it));
 const version = pickVersion(it);
 const status = normalizeStatus(it);
 

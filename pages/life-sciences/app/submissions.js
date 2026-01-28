@@ -10,6 +10,7 @@ import {
   requireAuthOrRedirect,
   logout,
 } from "@/lib/life_sciences_app_lib/auth";
+import { formatUtcTimestamp } from "@/lib/life_sciences_app_lib/utils";
 
 function normalizeText(x) {
   return String(x || "").toLowerCase();
@@ -503,7 +504,7 @@ export default function SubmissionsPage() {
                                   String(id)
                                 )}`}
                               >
-                                View
+                                Audit Trail
                               </Link>
 
                               {user.role === "Approver" &&

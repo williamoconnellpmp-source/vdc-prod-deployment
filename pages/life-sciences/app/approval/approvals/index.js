@@ -10,6 +10,7 @@ import {
   requireAuthOrRedirect,
   logout,
 } from "../../../../../lib/life_sciences_app_lib/auth";
+import { formatUtcTimestamp } from "../../../../../lib/life_sciences_app_lib/utils";
 
 function truncateMiddle(s, max = 34) {
   const str = String(s || "");
@@ -64,24 +65,7 @@ function pickOwner(it) {
 }
 
 // Human-readable UTC time (keeps “—” if missing)
-function formatUtc(ts) {
-  if (!ts) return "—";
-  try {
-    const d = new Date(ts);
-    if (Number.isNaN(d.getTime())) return String(ts);
-    return d.toLocaleString("en-US", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }) + " UTC";
-  } catch {
-    return String(ts);
-  }
-}
+// Use formatUtcTimestamp from utils
 
 export default function PendingApprovalsPage() {
   const router = useRouter();
@@ -331,7 +315,7 @@ export default function PendingApprovalsPage() {
                     const owner = pickOwner(it);
                     const ownerShort =
                       owner === "—" ? "—" : truncateMiddle(owner, 24);
-                    const submittedUtc = formatUtc(it?.submittedAt);
+                    const submittedUtc = formatUtcTimestamp(it?.submittedAt);
                     const busyRow = rowBusyId === docId;
 
                     return (

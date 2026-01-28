@@ -311,7 +311,7 @@ export default function ApprovalDetailPage() {
                         return submittedBy || "—";
                       })()}
                     </div>
-                    <div className="muted">Submitted (UTC): {doc?.submittedAt || "—"}</div>
+                    <div className="muted">Submitted (UTC): {doc?.submittedAt ? formatUtcTimestamp(doc.submittedAt) : "—"}</div>
                   </div>
 
                   <div className="summaryCard">

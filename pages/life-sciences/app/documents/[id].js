@@ -7,17 +7,8 @@ import { useRouter } from "next/router";
 import { apiFetch } from "../../../../lib/life_sciences_app_lib/api";
 import { getCurrentUser, requireAuthOrRedirect, logout } from "../../../../lib/life_sciences_app_lib/auth";
 
-function formatTimestamp(ts) {
-  if (!ts) return "—";
-  // Convert to ISO 8601 with Z (UTC) if not already
-  try {
-    const date = new Date(ts);
-    if (isNaN(date.getTime())) return ts; // Return as-is if invalid
-    return date.toISOString().replace(/\.(\d{3})Z$/, ".$1Z"); // Ensure milliseconds and Z
-  } catch {
-    return ts;
-  }
-}
+// Use formatUtcTimestampForAudit from utils for audit trail (ISO format)
+// Use formatUtcTimestamp from utils for display (human-readable)
 
 function formatActor(actor) {
   if (!actor) return "—";
@@ -182,7 +173,7 @@ export default function DocumentDetailPage() {
       if (doc?.submittedAt) {
         const submitAction = "Submitted for Review";
         const actor = documentOwner;
-        const timestamp = formatTimestamp(doc.submittedAt);
+        const timestamp = formatUtcTimestampForAudit(doc.submittedAt);
         lines.push(`${timestamp} | ${submitAction} | Actor: ${actor}`);
       }
       
@@ -192,12 +183,12 @@ export default function DocumentDetailPage() {
           ? `Rejected: ${doc.rejectionReason}`
           : "Rejected";
         const actor = user?.displayName || "—";
-        const timestamp = formatTimestamp(doc.updatedAt);
+        const timestamp = formatUtcTimestampForAudit(doc.updatedAt);
         lines.push(`${timestamp} | ${rejectAction} | Actor: ${actor}`);
       } else if (doc?.status === "APPROVED" && doc?.updatedAt) {
         const approveAction = "Approved";
         const actor = user?.displayName || "—";
-        const timestamp = formatTimestamp(doc.updatedAt);
+        const timestamp = formatUtcTimestampForAudit(doc.updatedAt);
         lines.push(`${timestamp} | ${approveAction} | Actor: ${actor}`);
       }
     } else {
@@ -299,13 +290,13 @@ export default function DocumentDetailPage() {
                   <div className="summaryCard">
                     <div className="label">Submitted by</div>
                     <div className="value">{documentOwner}</div>
-                    <div className="muted">Submitted (UTC): {doc?.submittedAt ? formatTimestamp(doc.submittedAt) : "—"}</div>
+                    <div className="muted">Submitted (UTC): {doc?.submittedAt ? formatUtcTimestamp(doc.submittedAt) : "—"}</div>
                   </div>
 
                   <div className="summaryCard">
                     <div className="label">Status</div>
                     <div className="value">{doc?.status || "—"}</div>
-                    <div className="muted">Updated (UTC): {doc?.updatedAt ? formatTimestamp(doc.updatedAt) : "—"}</div>
+                    <div className="muted">Updated (UTC): {doc?.updatedAt ? formatUtcTimestamp(doc.updatedAt) : "—"}</div>
                   </div>
                 </div>
 

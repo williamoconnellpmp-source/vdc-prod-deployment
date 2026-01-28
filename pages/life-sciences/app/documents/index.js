@@ -10,6 +10,7 @@ import {
   requireAuthOrRedirect,
   logout,
 } from "@/lib/life_sciences_app_lib/auth";
+import { formatUtcTimestamp } from "@/lib/life_sciences_app_lib/utils";
 
 function normalizeText(x) {
   return String(x || "").toLowerCase();
@@ -464,7 +465,7 @@ export default function DocumentsRegisterPage() {
                           </td>
 
                           <td className="cellWrap">
-                            <span className="wrapAny">{updatedUtc}</span>
+                            <span className="wrapAny">{formatUtcTimestamp(updatedUtc)}</span>
                           </td>
 
                           <td>
