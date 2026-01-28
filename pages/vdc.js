@@ -55,6 +55,9 @@ export default function VDCDemoPage() {
               <p className="subtitle">
                 A live, serverless AWS implementation of a GxP-capable Validated Document Control system, including full FDA-ready documentation (URS, FS, RTM, IQ/OQ/PQ) and a production-grade identity and audit architecture.
               </p>
+              <p className="subtitle awsCallout">
+                Built entirely on Amazon Cognito, Amazon API Gateway, AWS Lambda, Amazon DynamoDB, Amazon S3 (with Object Lock for WORM audit storage), AWS IAM, AWS CloudFormation, Amazon CloudFront, and Amazon CloudWatch.
+              </p>
 
               {/* Purpose + GxP context */}
               <div className="contextBox">
@@ -308,6 +311,12 @@ export default function VDCDemoPage() {
             line-height: 1.6;
             margin-bottom: 18px;
             color: #ffffff;
+          }
+
+          .awsCallout {
+            margin-top: -6px;
+            font-size: 0.98rem;
+            color: rgba(219, 234, 254, 0.96);
           }
 
           .whiteText {

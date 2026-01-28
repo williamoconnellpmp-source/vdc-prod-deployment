@@ -216,7 +216,9 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL generate a unique document ID (UUID v4) for each uploaded document before S3 upload.
                     <div className="reqRationale"><strong>Rationale:</strong> Unique document identification per 21 CFR Part 11.10(e) enables traceability and prevents document conflicts.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> UploadInitLambda generates documentId = str(uuid.uuid4()) in <code>temp-analysis/vdc-dev-template.yaml</code> line 200. Document ID returned to frontend before S3 upload. Used as S3 key prefix: f"{env_name}/documents/{document_id}/{filename}".</div>
+                    <div className="reqImplementation">
+                      <strong>Implementation:</strong> UploadInitLambda generates documentId = str(uuid.uuid4()) in <code>temp-analysis/vdc-dev-template.yaml</code> line 200. Document ID is returned to the frontend before S3 upload and used as part of the S3 key prefix in the pattern <code>{`&lt;env&gt;/documents/{document_id}/{filename}`}</code>, where <code>&lt;env&gt;</code> represents the environment (for example, <code>dev</code> or <code>prod</code>).
+                    </div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
@@ -450,7 +452,9 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL write audit records to S3 WORM (Write-Once-Read-Many) bucket with Object Lock in COMPLIANCE mode for long-term retention.
                     <div className="reqRationale"><strong>Rationale:</strong> Immutable long-term audit storage per 21 CFR Part 11.10(e) and 7-year retention requirements. COMPLIANCE mode prevents deletion even by root account.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> VdcAuditWormBucket configured with ObjectLockEnabled: true, ObjectLockConfiguration with Mode: COMPLIANCE, DefaultRetention: 90 days in <code>cloudformation/prod/vdc-prod-app.yaml</code> lines 122-143. Lambda functions write audit JSON to S3 with prefix "audit/{env_name}/".</div>
+                    <div className="reqImplementation">
+                      <strong>Implementation:</strong> VdcAuditWormBucket is configured with ObjectLockEnabled: true and ObjectLockConfiguration with Mode: COMPLIANCE and DefaultRetention: 90 days in <code>cloudformation/prod/vdc-prod-app.yaml</code> lines 122-143. Lambda functions write audit JSON to S3 under an environment-specific prefix such as <code>audit/&lt;env&gt;/</code> (for example, <code>audit/dev/</code> or <code>audit/prod/</code>).
+                    </div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
