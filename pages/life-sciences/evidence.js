@@ -1,4 +1,4 @@
-﻿import Head from "next/head";
+import Head from "next/head";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -72,13 +72,19 @@ export default function EvidencePage() {
             <section className="hero">
               <h1 className="h1">Regulated Documentation &amp; Cloud Evidence</h1>
               <p className="subtitle">
-                I translate GxP / CSV / 21 CFR Part 11 expectations into AWS-native controls, validated workflows,
-                and audit-ready evidence.
+                How I turn GxP / CSV / 21 CFR Part 11 expectations into AWS-native controls, validation artifacts, and
+                inspection-ready systems.
               </p>
 
               <div className="credLine">
                 PMP (2005) · Prosci (2017) · AWS Solutions Architect (2025) · 9 years consulting experience · 10 years
                 senior delivery leadership
+              </div>
+
+              <div className="summaryStrip" aria-label="Portfolio highlights">
+                <span className="summaryItem">End-to-end validation: URS → FS → RTM → IQ/OQ/PQ</span>
+                <span className="summaryItem">AWS-native identity, audit trail, and data integrity patterns</span>
+                <span className="summaryItem">$100M+ programs · 100K+ users · $20M+ savings</span>
               </div>
 
               <div className="badges">
@@ -94,18 +100,14 @@ export default function EvidencePage() {
               <div className="card">
                 <div className="cardHeader">
                   <h2 className="cardTitle">Validated Document Control (VDC)</h2>
-                  <span className="tag green">Live demo</span>
-                </div>
-                <p className="cardDesc">
-                  Live AWS prototype demonstrating controlled workflow states, role separation, integrity controls,
-                  and auditability.
-                </p>
-
-                <div className="primaryCtaRow">
-                  <Link href="/life-sciences/app" className="primaryCta">
-                    Go to Demo →
+                  <Link href="/life-sciences/app" className="tag green tagButton">
+                    Live demo →
                   </Link>
                 </div>
+                <p className="cardDesc">
+                  Live AWS prototype that shows exactly how 21 CFR Part 11-style controls look on a serverless AWS stack
+                  (workflow states, role separation, integrity controls, and auditability).
+                </p>
 
                 <div className="cardLinks">
                   <Link href="/life-sciences/docs/urs" className="cardLink">
@@ -120,12 +122,7 @@ export default function EvidencePage() {
                   <Link href="/life-sciences/docs/iq-oq-pq" className="cardLink">
                     IQ / OQ / PQ Results →
                   </Link>
-                  <Link href="/life-sciences/docs/vdc-non-gxp-evidence" className="cardLink">
-                    Non-GxP Verification &amp; Test Evidence (Demo) →
-                  </Link>
                 </div>
-
-                <div className="note">Coming Soon: Fully GxP, Part 11 Production App.</div>
               </div>
 
               {/* BOX 2 */}
@@ -135,8 +132,8 @@ export default function EvidencePage() {
                   <span className="tag purple">Authority</span>
                 </div>
                 <p className="cardDesc">
-                  Practical interpretation + controls mapping to regulated cloud delivery (audit trails, identity,
-                  integrity, change control, validation strategy).
+                  Practical ways to interpret regulations and map them to concrete cloud controls (audit trails,
+                  identity, integrity, change control, validation strategy).
                 </p>
                 <div className="cardLinks">
                   <Link href="/life-sciences/docs/21-cfr-practice" className="cardLink">
@@ -161,8 +158,8 @@ export default function EvidencePage() {
                   <span className="tag blue">Enterprise proof</span>
                 </div>
                 <p className="cardDesc">
-                  Well-known Life Sciences organizations adopting cloud at scale — plus the lessons that matter for
-                  regulated delivery.
+                  Well-known Life Sciences organizations adopting cloud at scale — and the outcomes and lessons that
+                  shaped how I approach regulated delivery.
                 </p>
 
                 {/* Company chips */}
@@ -505,12 +502,29 @@ export default function EvidencePage() {
             margin: 0 auto 8px;
           }
           .credLine {
-            margin: 0 auto 16px;
+            margin: 0 auto 10px;
             max-width: 980px;
             font-size: 0.86rem;
             font-weight: 750;
             color: rgba(255, 255, 255, 0.72);
             letter-spacing: 0.01em;
+          }
+
+          .summaryStrip {
+            margin: 0 auto 14px;
+            max-width: 980px;
+            font-size: 0.84rem;
+            color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
+          .summaryItem {
+            padding: 4px 9px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(6, 20, 40, 0.85);
           }
 
           .badges {
@@ -572,6 +586,14 @@ export default function EvidencePage() {
           .tag.green {
             border-color: rgba(34, 197, 94, 0.35);
             background: rgba(34, 197, 94, 0.12);
+          }
+          .tag.tagButton {
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            cursor: pointer;
           }
           .tag.purple {
             border-color: rgba(139, 92, 246, 0.35);
