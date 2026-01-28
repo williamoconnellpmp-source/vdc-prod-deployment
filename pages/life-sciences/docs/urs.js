@@ -380,7 +380,7 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL create audit records for all document submissions with eventType "SUBMIT" and electronic signature record with signatureMeaning "SUBMIT".
                     <div className="reqRationale"><strong>Rationale:</strong> Submission audit record and electronic signature per 21 CFR Part 11.50 and 11.70. Signature record provides attestation text.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> SubmitLambda creates two DynamoDB records: (1) Audit record with eventType="SUBMIT", (2) Electronic signature record with sk=f"ESIG#{timestamp}#{sig_id}", signatureMeaning="SUBMIT", attestationText="I attest this submission is accurate and complete." in <code>temp-analysis/vdc-dev-template.yaml</code> lines 345-388.</div>
+                    <div className="reqImplementation"><strong>Implementation:</strong> SubmitLambda creates two DynamoDB records: (1) Audit record with eventType="SUBMIT", (2) Electronic signature record with sk=f"ESIG#&lbrace;timestamp&rbrace;#&lbrace;sig_id&rbrace;", signatureMeaning="SUBMIT", attestationText="I attest this submission is accurate and complete." in <code>temp-analysis/vdc-dev-template.yaml</code> lines 345-388.</div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
@@ -443,7 +443,7 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL display audit trail in FDA-ready format: "AUDIT TRAIL (UTC)" header, document metadata (Title, ID, Status), "EVENTS (UTC)" section with format "timestamp | action | Actor: name".
                     <div className="reqRationale"><strong>Rationale:</strong> Human-readable audit trail format per FDA inspection requirements. Matches example format shown on Overview page for consistency.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> Frontend <code>pages/life-sciences/app/documents/[id].js</code> auditTrailText useMemo formats audit events as: "{timestamp} | {action} | Actor: {actor}". Timestamps use ISO 8601 format with Z suffix via formatUtcTimestampForAudit(). Rejection reasons included in action text: "Rejected: {reason}".</div>
+                    <div className="reqImplementation"><strong>Implementation:</strong> Frontend <code>pages/life-sciences/app/documents/[id].js</code> auditTrailText useMemo formats audit events as: "&lbrace;timestamp&rbrace; | &lbrace;action&rbrace; | Actor: &lbrace;actor&rbrace;". Timestamps use ISO 8601 format with Z suffix via formatUtcTimestampForAudit(). Rejection reasons included in action text: "Rejected: &lbrace;reason&rbrace;".</div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
