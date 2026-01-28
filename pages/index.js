@@ -59,23 +59,12 @@ export default function HomePage() {
                 Genentech, now AWS Certified Solutions Architect.
               </p>
 
-              <div className="metrics">
-                <div className="metricItem">
-                  <div className="metricValue">$100M+</div>
-                  <div className="metricLabel">Program delivery scope</div>
-                </div>
-                <div className="metricItem">
-                  <div className="metricValue">100K+</div>
-                  <div className="metricLabel">Users migrated to the cloud</div>
-                </div>
-                <div className="metricItem">
-                  <div className="metricValue">$20M+</div>
-                  <div className="metricLabel">Savings delivered via migration</div>
-                </div>
-                <div className="metricItem">
-                  <div className="metricValue">100+</div>
-                  <div className="metricLabel">Resources led across programs</div>
-                </div>
+              <div className="metricsRow" aria-label="Program scope highlights">
+                <span className="metricsLabel">Program scope:</span>
+                <span className="metricPill">$100M+ delivery</span>
+                <span className="metricPill">100K+ users migrated</span>
+                <span className="metricPill">$20M+ cloud savings</span>
+                <span className="metricPill">100+ resources led</span>
               </div>
             </div>
           </section>
@@ -245,31 +234,28 @@ export default function HomePage() {
             margin-bottom: 10px;
           }
 
-          .metrics {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 18px;
-            margin-top: 24px;
-            margin-bottom: 8px;
-          }
-
-          .metricItem {
-            background: rgba(7, 14, 24, 0.78);
-            border-radius: 14px;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            padding: 14px 16px;
-          }
-
-          .metricValue {
-            font-size: 1.4rem;
-            font-weight: 750;
-            letter-spacing: -0.02em;
-          }
-
-          .metricLabel {
-            margin-top: 4px;
-            font-size: 0.9rem;
+          .metricsRow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-top: 18px;
+            margin-bottom: 4px;
+            font-size: 0.96rem;
             color: rgba(255, 255, 255, 0.78);
+          }
+
+          .metricsLabel {
+            opacity: 0.9;
+          }
+
+          .metricPill {
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            padding: 4px 10px;
+            font-size: 0.88rem;
+            color: rgba(255, 255, 255, 0.86);
+            background: rgba(6, 20, 40, 0.4);
           }
 
           .cardsSection {
