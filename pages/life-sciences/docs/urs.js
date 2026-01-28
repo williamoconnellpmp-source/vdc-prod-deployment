@@ -751,7 +751,7 @@ export default function URSPage() {
               </ul>
 
               <h3 className="h3">4.2 DynamoDB Schema</h3>
-              <p><strong>VDC_Documents_{EnvironmentName} Table:</strong></p>
+              <p><strong>VDC_Documents_&lbrace;EnvironmentName&rbrace; Table:</strong></p>
               <ul>
                 <li>Primary Key: pk (HASH), sk (RANGE)</li>
                 <li>GSI1: gsi1pk (HASH), gsi1sk (RANGE) - for status-based queries</li>
