@@ -25,40 +25,57 @@ function truncateMiddle(s, max = 44) {
 }
 
 // Best-effort owner display (order matters)
-// Prioritize human-readable fields (email, displayName) over UUIDs
+// Prioritize human-readable fields (email, displayName) over UUIDs and map demo users to friendly labels
 function pickOwner(it) {
-  // First try display names and emails (human-readable)
-  const humanReadable = 
+  // Display names from metadata
+  const display =
     it?.ownerDisplayName ||
     it?.ownerName ||
-    it?.ownerEmail ||
     it?.submittedByDisplayName ||
-    it?.submittedByName ||
-    it?.submittedByEmail;
-  
-  if (humanReadable) return humanReadable;
-  
-  // Then try usernames
-  const username = it?.ownerUsername;
-  if (username) return username;
-  
-  // Check if submittedBy looks like an email (contains @)
+    it?.submittedByName;
+  if (display) return display;
+
+  // Emails
+  const email =
+    it?.ownerEmail ||
+    it?.submittedByEmail ||
+    (typeof it?.submittedBy === "string" && it.submittedBy.includes("@")
+      ? it.submittedBy
+      : null);
+
+  if (email) {
+    const lower = String(email).toLowerCase();
+    if (lower.includes("submitter1")) return "Submitter 1";
+    if (lower.includes("submitter2")) return "Submitter 2";
+    if (lower.includes("approver1")) return "Approver 1";
+    if (lower.includes("approver2")) return "Approver 2";
+    return email;
+  }
+
+  // Usernames
+  if (it?.ownerUsername) return it.ownerUsername;
+
   const submittedBy = it?.submittedBy;
-  if (submittedBy && typeof submittedBy === "string" && submittedBy.includes("@")) {
+
+  // Hide raw UUID-style values
+  if (
+    submittedBy &&
+    typeof submittedBy === "string" &&
+    submittedBy.length > 30 &&
+    !submittedBy.includes("@")
+  ) {
+    return "Submitter";
+  }
+
+  // Last resort: short, non-UUID-ish submittedBy
+  if (
+    submittedBy &&
+    typeof submittedBy === "string" &&
+    submittedBy.length <= 30
+  ) {
     return submittedBy;
   }
-  
-  // Skip UUIDs (long alphanumeric strings without @) - show fallback instead
-  // UUIDs are typically 36 chars with dashes: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-  if (submittedBy && typeof submittedBy === "string" && submittedBy.length > 30 && !submittedBy.includes("@")) {
-    return "—"; // Don't show UUID
-  }
-  
-  // Last resort: show submittedBy if it's short or looks like a name
-  if (submittedBy && typeof submittedBy === "string" && submittedBy.length < 30) {
-    return submittedBy;
-  }
-  
+
   return "—";
 }
 
