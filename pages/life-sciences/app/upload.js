@@ -17,7 +17,8 @@ export default function UploadPage() {
   const currentUserLabel = useMemo(() => {
     try {
       const u = getCurrentUser?.();
-      return u?.username || u?.email || "demo-user";
+      // Prefer displayName (email), then email, then fallback
+      return u?.displayName || u?.email || "demo-user";
     } catch {
       return "demo-user";
     }

@@ -24,19 +24,41 @@ function truncateMiddle(s, max = 44) {
 }
 
 // Best-effort owner display (order matters)
+// Prioritize human-readable fields (email, displayName) over UUIDs
 function pickOwner(it) {
-  return (
+  // First try display names and emails (human-readable)
+  const humanReadable = 
     it?.ownerDisplayName ||
     it?.ownerName ||
     it?.ownerEmail ||
-    it?.ownerUsername ||
-    it?.ownerUserId ||
     it?.submittedByDisplayName ||
     it?.submittedByName ||
-    it?.submittedByEmail ||
-    it?.submittedBy ||
-    "—"
-  );
+    it?.submittedByEmail;
+  
+  if (humanReadable) return humanReadable;
+  
+  // Then try usernames
+  const username = it?.ownerUsername;
+  if (username) return username;
+  
+  // Check if submittedBy looks like an email (contains @)
+  const submittedBy = it?.submittedBy;
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.includes("@")) {
+    return submittedBy;
+  }
+  
+  // Skip UUIDs (long alphanumeric strings without @) - show fallback instead
+  // UUIDs are typically 36 chars with dashes: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.length > 30 && !submittedBy.includes("@")) {
+    return "—"; // Don't show UUID
+  }
+  
+  // Last resort: show submittedBy if it's short or looks like a name
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.length < 30) {
+    return submittedBy;
+  }
+  
+  return "—";
 }
 
 function pickDocId(it) {

@@ -34,17 +34,33 @@ function roleIsApprover(role) {
   return r === "approver";
 }
 
-// Owner priority: email → username → userId → submittedByEmail → submittedBy → submittedBySub
+// Owner priority: email → username → submittedBy (if email) → "—"
+// Skip UUIDs (long strings without @)
 function pickOwner(it) {
-  return (
-    it?.ownerEmail ||
-    it?.ownerUsername ||
-    it?.ownerUserId ||
-    it?.submittedByEmail ||
-    it?.submittedBy ||
-    it?.submittedBySub ||
-    "—"
-  );
+  // Prioritize human-readable fields
+  const email = it?.ownerEmail || it?.submittedByEmail;
+  if (email) return email;
+  
+  const username = it?.ownerUsername;
+  if (username) return username;
+  
+  // Check if submittedBy looks like an email
+  const submittedBy = it?.submittedBy;
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.includes("@")) {
+    return submittedBy;
+  }
+  
+  // Skip UUIDs (long strings without @)
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.length > 30 && !submittedBy.includes("@")) {
+    return "—"; // Don't show UUID
+  }
+  
+  // Only show submittedBy if it's short (might be a name)
+  if (submittedBy && typeof submittedBy === "string" && submittedBy.length < 30) {
+    return submittedBy;
+  }
+  
+  return "—";
 }
 
 // Human-readable UTC time (keeps “—” if missing)

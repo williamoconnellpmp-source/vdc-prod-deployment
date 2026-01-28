@@ -227,7 +227,32 @@ export default function ApprovalDetailPage() {
 
                   <div className="summaryCard">
                     <div className="label">Submitted by</div>
-                    <div className="value">{doc?.submittedBy || doc?.ownerUsername || doc?.ownerEmail || "—"}</div>
+                    <div className="value">
+                      {(() => {
+                        // Prioritize human-readable fields over UUIDs
+                        const email = doc?.ownerEmail || doc?.submittedByEmail;
+                        const displayName = doc?.ownerDisplayName || doc?.ownerName;
+                        const username = doc?.ownerUsername;
+                        const submittedBy = doc?.submittedBy;
+                        
+                        // Prefer email/displayName
+                        if (email) return email;
+                        if (displayName) return displayName;
+                        if (username) return username;
+                        
+                        // If submittedBy looks like an email, use it
+                        if (submittedBy && typeof submittedBy === "string" && submittedBy.includes("@")) {
+                          return submittedBy;
+                        }
+                        
+                        // Skip UUIDs (long strings without @)
+                        if (submittedBy && typeof submittedBy === "string" && submittedBy.length > 30 && !submittedBy.includes("@")) {
+                          return "—";
+                        }
+                        
+                        return submittedBy || "—";
+                      })()}
+                    </div>
                     <div className="muted">Submitted (UTC): {doc?.submittedAt || "—"}</div>
                   </div>
 
