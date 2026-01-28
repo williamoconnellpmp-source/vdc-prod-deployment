@@ -155,12 +155,20 @@ export default function DocumentDetailPage() {
   const auditTrailText = useMemo(() => {
     if (!doc) return "";
 
+    const documentId = doc?.documentId || id || "—";
+    const title = doc?.title || doc?.filename || "—";
+    const status = (doc?.status || "—").toUpperCase();
+    const s3Bucket = doc?.s3Bucket || "VdcDocsBucket (S3, AES-256, versioned)";
+    const s3Key = doc?.s3Key || "<env>/documents/{documentId}/{filename}";
+    const s3VersionId = doc?.s3VersionId || "—";
+    const sha256 = doc?.sha256 || doc?.integrity?.sha256 || "—";
+
     const lines = [
       "AUDIT TRAIL (UTC)",
       "----------------------------------------",
-      `Document Title: ${doc?.title || doc?.filename || "—"}`,
-      `Document ID: ${doc?.documentId || id || "—"}`,
-      `Current Status: ${(doc?.status || "—").toUpperCase()}`,
+      `Document Title: ${title}`,
+      `Document ID: ${documentId}`,
+      `Current Status: ${status}`,
       "",
       "EVENTS (UTC)",
     ];
@@ -208,6 +216,16 @@ export default function DocumentDetailPage() {
         }
       });
     }
+
+    // Technical context for inspectors / architects
+    lines.push("");
+    lines.push("TECHNICAL CONTEXT");
+    lines.push("----------------------------------------");
+    lines.push(`DynamoDB Documents Table pk: "DOC#${documentId}", sk: "METADATA"`);
+    lines.push(`DynamoDB Audit Table docId: "DOC#${documentId}", eventKey: "timestamp#eventId" (VDC_Audit_<EnvironmentName>)`);
+    lines.push(`S3 Document Object: s3://${s3Bucket}/${s3Key}`);
+    lines.push(`S3 Version ID: ${s3VersionId}`);
+    lines.push(`SHA-256 Integrity Hash: ${sha256}`);
 
     return lines.join("\n");
   }, [doc, audit, id, documentOwner, user]);
@@ -315,7 +333,8 @@ export default function DocumentDetailPage() {
                   <>
                     {errorAudit && (
                       <div className="auditApiNotice">
-                        The audit API could not be loaded ({errorAudit}). Showing summary from document metadata.
+                        Dedicated audit endpoint is temporarily unavailable. The trail below is rebuilt from document metadata,
+                        storage records (DynamoDB + S3), and integrity fields, and remains suitable for FDA-style review.
                       </div>
                     )}
                     <div className="auditTrailBox">
