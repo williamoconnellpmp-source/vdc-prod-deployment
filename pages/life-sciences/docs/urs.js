@@ -656,8 +656,12 @@ export default function URSPage() {
                   <div className="reqId">URS-DISPLAY-001</div>
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL display human-readable submitter/owner names (email, displayName) instead of UUIDs in all document listings and detail pages.
-                    <div className="reqRationale"><strong>Rationale:</strong> User experience and audit trail readability. UUIDs are not meaningful to users or FDA inspectors.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> Frontend functions in <code>pages/life-sciences/app/documents/index.js</code> pickOwner() and <code>pages/life-sciences/app/submissions.js</code> pickSubmittedBy() prioritize human-readable fields (ownerEmail, ownerDisplayName, submittedByEmail) over UUIDs. UUIDs (long strings >30 chars without @) are hidden and display "—" instead.</div>
+                    <div className="reqRationale">
+                      <strong>Rationale:</strong> User experience and audit trail readability. UUIDs are not meaningful to users or FDA inspectors.
+                    </div>
+                    <div className="reqImplementation">
+                      <strong>Implementation:</strong> Frontend functions in <code>pages/life-sciences/app/documents/index.js</code> pickOwner() and <code>pages/life-sciences/app/submissions.js</code> pickSubmittedBy() prioritize human-readable fields (ownerEmail, ownerDisplayName, submittedByEmail) over UUIDs. UUIDs (long strings &gt; 30 characters without an <code>@</code>) are hidden and display &quot;—&quot; instead.
+                    </div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
