@@ -56,8 +56,27 @@ export default function HomePage() {
 
               <p className="lead2">
                 GxP / 21 CFR Part 11 delivery background, 14 years with Roche /
-                Genentech, now AWS Certified Solutions Architect
+                Genentech, now AWS Certified Solutions Architect.
               </p>
+
+              <div className="metrics">
+                <div className="metricItem">
+                  <div className="metricValue">$100M+</div>
+                  <div className="metricLabel">Program delivery scope</div>
+                </div>
+                <div className="metricItem">
+                  <div className="metricValue">100K+</div>
+                  <div className="metricLabel">Users migrated to the cloud</div>
+                </div>
+                <div className="metricItem">
+                  <div className="metricValue">$20M+</div>
+                  <div className="metricLabel">Savings delivered via migration</div>
+                </div>
+                <div className="metricItem">
+                  <div className="metricValue">100+</div>
+                  <div className="metricLabel">Resources led across programs</div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -226,6 +245,33 @@ export default function HomePage() {
             margin-bottom: 10px;
           }
 
+          .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 18px;
+            margin-top: 24px;
+            margin-bottom: 8px;
+          }
+
+          .metricItem {
+            background: rgba(7, 14, 24, 0.78);
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            padding: 14px 16px;
+          }
+
+          .metricValue {
+            font-size: 1.4rem;
+            font-weight: 750;
+            letter-spacing: -0.02em;
+          }
+
+          .metricLabel {
+            margin-top: 4px;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.78);
+          }
+
           .cardsSection {
             position: relative;
             z-index: 2;
@@ -305,6 +351,10 @@ export default function HomePage() {
           }
 
           @media (max-width: 980px) {
+            .metrics {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .cardsGrid {
               grid-template-columns: repeat(2, 1fr);
             }
