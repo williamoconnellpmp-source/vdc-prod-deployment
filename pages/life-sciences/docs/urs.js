@@ -254,7 +254,7 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL store document metadata in DynamoDB with composite key: pk="DOC#&lbrace;documentId&rbrace;", sk="METADATA".
                     <div className="reqRationale"><strong>Rationale:</strong> Structured data storage enables efficient querying and document retrieval per system design requirements.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> DynamoDB Documents table schema: pk (HASH), sk (RANGE), gsi1pk, gsi1sk for status-based queries. Document metadata stored with pk=f"DOC#{document_id}", sk="METADATA" in <code>temp-analysis/vdc-dev-template.yaml</code> lines 210-228.</div>
+                    <div className="reqImplementation"><strong>Implementation:</strong> DynamoDB Documents table schema: pk (HASH), sk (RANGE), gsi1pk, gsi1sk for status-based queries. Document metadata stored with pk=f"DOC#&lbrace;document_id&rbrace;", sk="METADATA" in <code>temp-analysis/vdc-dev-template.yaml</code> lines 210-228.</div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
