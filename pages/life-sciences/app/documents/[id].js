@@ -311,14 +311,17 @@ export default function DocumentDetailPage() {
 
                 {loadingAudit ? (
                   <div className="loading">Loading audit trail...</div>
-                ) : errorAudit ? (
-                  <div className="errorBox">
-                    <strong>Error:</strong> {errorAudit}
-                  </div>
                 ) : (
-                  <div className="auditTrailBox">
-                    <pre className="auditTrailText">{auditTrailText || "No audit events available."}</pre>
-                  </div>
+                  <>
+                    {errorAudit && (
+                      <div className="auditApiNotice">
+                        The audit API could not be loaded ({errorAudit}). Showing summary from document metadata.
+                      </div>
+                    )}
+                    <div className="auditTrailBox">
+                      <pre className="auditTrailText">{auditTrailText || "No audit events available."}</pre>
+                    </div>
+                  </>
                 )}
               </section>
             </>
@@ -460,6 +463,16 @@ export default function DocumentDetailPage() {
           border: 1px solid rgba(255, 80, 80, 0.45);
           background: rgba(255, 30, 30, 0.12);
           color: #fff;
+        }
+
+        .auditApiNotice {
+          margin-bottom: 12px;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid rgba(245, 158, 11, 0.5);
+          background: rgba(245, 158, 11, 0.12);
+          color: #fef3c7;
+          font-weight: 800;
         }
 
         .auditTrailBox {
