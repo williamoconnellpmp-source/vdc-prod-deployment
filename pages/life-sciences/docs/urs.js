@@ -217,7 +217,7 @@ export default function URSPage() {
                     <strong>Requirement:</strong> The system SHALL generate a unique document ID (UUID v4) for each uploaded document before S3 upload.
                     <div className="reqRationale"><strong>Rationale:</strong> Unique document identification per 21 CFR Part 11.10(e) enables traceability and prevents document conflicts.</div>
                     <div className="reqImplementation">
-                      <strong>Implementation:</strong> UploadInitLambda generates documentId = str(uuid.uuid4()) in <code>temp-analysis/vdc-dev-template.yaml</code> line 200. Document ID is returned to the frontend before S3 upload and used as part of the S3 key prefix in the pattern <code>{`&lt;env&gt;/documents/{document_id}/{filename}`}</code>, where <code>&lt;env&gt;</code> represents the environment (for example, <code>dev</code> or <code>prod</code>).
+                      <strong>Implementation:</strong> UploadInitLambda generates documentId = str(uuid.uuid4()) in <code>temp-analysis/vdc-dev-template.yaml</code> line 200. Document ID is returned to the frontend before S3 upload and used as part of the S3 key prefix in the pattern <code>&lt;env&gt;/documents/&lbrace;document_id&rbrace;/&lbrace;filename&rbrace;</code>, where <code>&lt;env&gt;</code> represents the environment (for example, <code>dev</code> or <code>prod</code>).
                     </div>
                   </div>
                   <div className="reqPriority">Critical</div>
@@ -252,7 +252,7 @@ export default function URSPage() {
                 <div className="reqRow">
                   <div className="reqId">URS-SUBMIT-006</div>
                   <div className="reqDesc">
-                    <strong>Requirement:</strong> The system SHALL store document metadata in DynamoDB with composite key: pk="DOC#{documentId}", sk="METADATA".
+                    <strong>Requirement:</strong> The system SHALL store document metadata in DynamoDB with composite key: pk="DOC#&lbrace;documentId&rbrace;", sk="METADATA".
                     <div className="reqRationale"><strong>Rationale:</strong> Structured data storage enables efficient querying and document retrieval per system design requirements.</div>
                     <div className="reqImplementation"><strong>Implementation:</strong> DynamoDB Documents table schema: pk (HASH), sk (RANGE), gsi1pk, gsi1sk for status-based queries. Document metadata stored with pk=f"DOC#{document_id}", sk="METADATA" in <code>temp-analysis/vdc-dev-template.yaml</code> lines 210-228.</div>
                   </div>
@@ -434,7 +434,7 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL store audit records in a separate DynamoDB table (VdcAuditTable) with composite key: docId (HASH), eventKey (RANGE).
                     <div className="reqRationale"><strong>Rationale:</strong> Separation of audit data from operational data per security best practices. Composite key enables efficient querying by document.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> VdcAuditTable schema in <code>cloudformation/prod/vdc-prod-app.yaml</code> lines 181-199: docId (HASH), eventKey (RANGE with format "timestamp#eventId"). Table name: VDC_Audit_{EnvironmentName}. Point-in-time recovery enabled for 7-year retention.</div>
+                    <div className="reqImplementation"><strong>Implementation:</strong> VdcAuditTable schema in <code>cloudformation/prod/vdc-prod-app.yaml</code> lines 181-199: docId (HASH), eventKey (RANGE with format "timestamp#eventId"). Table name: VDC_Audit_&lbrace;EnvironmentName&rbrace;. Point-in-time recovery enabled for 7-year retention.</div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
@@ -472,7 +472,7 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL create electronic signature records for document submission with signatureMeaning "SUBMIT", signerUserId, signerUsername, timestampUtc, and attestationText.
                     <div className="reqRationale"><strong>Rationale:</strong> Electronic signature per 21 CFR Part 11.50 and 11.70. Submission represents electronic signature with meaning equivalent to handwritten signature.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> SubmitLambda creates electronic signature record in DynamoDB with sk=f"ESIG#{timestamp}#{sig_id}", signatureMeaning="SUBMIT", signerRole="UPLOADER", attestationText="I attest this submission is accurate and complete." in <code>temp-analysis/vdc-dev-template.yaml</code> lines 371-388.</div>
+                    <div className="reqImplementation"><strong>Implementation:</strong> SubmitLambda creates electronic signature record in DynamoDB with sk=f"ESIG#&lbrace;timestamp&rbrace;#&lbrace;sig_id&rbrace;", signatureMeaning="SUBMIT", signerRole="UPLOADER", attestationText="I attest this submission is accurate and complete." in <code>temp-analysis/vdc-dev-template.yaml</code> lines 371-388.</div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
@@ -683,7 +683,7 @@ export default function URSPage() {
                   <div className="reqDesc">
                     <strong>Requirement:</strong> The system SHALL provide "Audit Trail" link (not "View") on all document listing pages for consistency and FDA readiness.
                     <div className="reqRationale"><strong>Rationale:</strong> Consistent terminology per FDA inspection requirements. "Audit Trail" is the standard term for regulatory compliance.</div>
-                    <div className="reqImplementation"><strong>Implementation:</strong> Frontend pages use "Audit Trail" link text: <code>pages/life-sciences/app/submissions.js</code> line 507, <code>pages/life-sciences/app/documents/index.js</code> line 478, <code>pages/life-sciences/app/approval/index.js</code> line 320. Links navigate to <code>/life-sciences/app/documents/{id}</code> which displays audit trail section.</div>
+                    <div className="reqImplementation"><strong>Implementation:</strong> Frontend pages use "Audit Trail" link text: <code>pages/life-sciences/app/submissions.js</code> line 507, <code>pages/life-sciences/app/documents/index.js</code> line 478, <code>pages/life-sciences/app/approval/index.js</code> line 320. Links navigate to <code>/life-sciences/app/documents/:id</code> which displays audit trail section.</div>
                   </div>
                   <div className="reqPriority">Critical</div>
                 </div>
@@ -755,11 +755,11 @@ export default function URSPage() {
               <ul>
                 <li>Primary Key: pk (HASH), sk (RANGE)</li>
                 <li>GSI1: gsi1pk (HASH), gsi1sk (RANGE) - for status-based queries</li>
-                <li>Document metadata: pk="DOC#{documentId}", sk="METADATA"</li>
-                <li>Electronic signatures: pk="DOC#{documentId}", sk="ESIG#{timestamp}#{sigId}"</li>
+                <li>Document metadata: pk="DOC#&lbrace;documentId&rbrace;", sk="METADATA"</li>
+                <li>Electronic signatures: pk="DOC#&lbrace;documentId&rbrace;", sk="ESIG#&lbrace;timestamp&rbrace;#&lbrace;sigId&rbrace;"</li>
                 <li>Fields: documentId, title, description, status, submittedAt, sha256, ownerEmail, ownerDisplayName, s3Bucket, s3Key, s3VersionId, contentType</li>
               </ul>
-              <p><strong>VDC_Audit_{EnvironmentName} Table:</strong></p>
+              <p><strong>VDC_Audit_&lbrace;EnvironmentName&rbrace; Table:</strong></p>
               <ul>
                 <li>Primary Key: docId (HASH), eventKey (RANGE)</li>
                 <li>Fields: eventId, timestampUtc, eventType, actorEmail, actorUsername, actorUserId, actorGroups, details (JSON), integrity (S3 location + SHA-256)</li>
