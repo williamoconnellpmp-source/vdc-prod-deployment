@@ -1,7 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CONFIG } from "@/lib/life_sciences_app_lib/config";
 import TOTPGenerator from "@/components/TOTPGenerator";
 
@@ -42,9 +42,12 @@ const MOBILE_BREAKPOINT_PX = 768;
 export default function ProductionLoginPage() {
   const router = useRouter();
   const [copiedField, setCopiedField] = useState(null);
-  const [approverMfaVisible, setApproverMfaVisible] = useState(null); // Track which approver MFA to show prominently
+  const [approverMfaVisible, setApproverMfaVisible] = useState(null);
+  const [currentMfaCode, setCurrentMfaCode] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const inlineMfaRef = useRef(null);
+
+  const onMfaCodeChange = useCallback((code) => setCurrentMfaCode(code || ""), []);
 
   // Detect mobile viewport for MFA layout and Cognito open behavior
   useEffect(() => {
@@ -274,6 +277,15 @@ export default function ProductionLoginPage() {
     clearCognitoSession().then(() => { window.location.href = cognitoUrl; });
   }
 
+  function handleCopyAll() {
+    if (!approverMfaVisible) return;
+    const u = USER_CREDENTIALS[approverMfaVisible];
+    if (!u) return;
+    const mfa = currentMfaCode && currentMfaCode.length === 6 ? currentMfaCode : "(wait for MFA – tap Copy all again)";
+    const block = `${u.email}\n${u.password}\n${mfa}`;
+    copyToClipboard(block, "copy-all");
+  }
+
   return (
     <>
       <Head>
@@ -497,11 +509,13 @@ export default function ProductionLoginPage() {
                       onCopyMfa={(code) => code && copyToClipboard(code, `${approverMfaVisible}-mfa`)}
                       copiedField={copiedField}
                       fieldPrefix={approverMfaVisible}
+                      onCodeChange={onMfaCodeChange}
                     />
                     <div style={styles.stickyMfaInstructions}>
-                      <strong>1.</strong> Copy email, password, and MFA code above.<br />
-                      <strong>2.</strong> Tap <strong>Continue to Cognito</strong> below. You will leave this page.<br />
-                      <strong>3.</strong> Paste when Cognito asks. No popups.
+                      <strong>1.</strong> Tap <strong>Copy all</strong> above (wait for MFA if it says &quot;wait&quot;).<br />
+                      <strong>2.</strong> Paste into Notes. Line 1 = email, line 2 = password, line 3 = MFA.<br />
+                      <strong>3.</strong> Tap <strong>Continue to Cognito</strong>. You will leave this page.<br />
+                      <strong>4.</strong> In Cognito, copy line 1, 2, or 3 from Notes when asked. No popups.
                     </div>
                     <button
                       type="button"
@@ -522,7 +536,7 @@ export default function ProductionLoginPage() {
                 <strong>MFA is required for all users.</strong><br /><br />
                 {isMobile ? (
                   <>
-                    <strong>Mobile:</strong> Tap a role → copy email, password, and MFA code → tap &quot;Continue to Cognito&quot; → paste when Cognito asks. No popups.
+                    <strong>Mobile:</strong> Tap a role → <strong>Copy all</strong> → paste into Notes → tap <strong>Continue to Cognito</strong> → in Cognito, copy each from Notes when asked. No popups.
                   </>
                 ) : (
                   <>
@@ -880,6 +894,19 @@ const styles = {
     padding: 20,
     boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
     border: "2px solid rgba(255,255,255,0.3)",
+  },
+  copyAllButton: {
+    width: "100%",
+    marginTop: 12,
+    marginBottom: 8,
+    padding: "14px 24px",
+    borderRadius: 12,
+    border: "2px solid rgba(255,255,255,0.4)",
+    background: "rgba(59, 130, 246, 0.9)",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 15,
+    cursor: "pointer",
   },
   continueToCognitoButton: {
     width: "100%",

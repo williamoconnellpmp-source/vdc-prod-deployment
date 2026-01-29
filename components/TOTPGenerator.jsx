@@ -14,7 +14,7 @@ const DEMO_TOTP_SECRETS = {
   'williamoconnellpmp+approver2@gmail.com': 'A6QQFOCIIN5KKFBPW2EBNCTQAKBAK6BGUFWWWP3A2FKCHY6FYU6Q'
 };
 
-export default function TOTPGenerator({ email, onCopyMfa, copiedField, fieldPrefix }) {
+export default function TOTPGenerator({ email, onCopyMfa, copiedField, fieldPrefix, onCodeChange }) {
   const [code, setCode] = useState('------');
   const [timeLeft, setTimeLeft] = useState(30);
   const [isReady, setIsReady] = useState(false);
@@ -29,8 +29,6 @@ export default function TOTPGenerator({ email, onCopyMfa, copiedField, fieldPref
 
     const updateCode = () => {
       try {
-        // Generate TOTP code with Cognito-compatible settings
-        // Cognito uses: 6 digits, 30-second period, SHA-1 algorithm, Base32 encoding
         const newCode = generateSync({
           secret: secret,
           digits: 6,
@@ -41,31 +39,26 @@ export default function TOTPGenerator({ email, onCopyMfa, copiedField, fieldPref
         
         if (newCode && typeof newCode === 'string' && newCode.length === 6) {
           setCode(newCode);
+          if (typeof onCodeChange === 'function') onCodeChange(newCode);
         } else {
           setCode('------');
+          if (typeof onCodeChange === 'function') onCodeChange('');
           console.error('Invalid TOTP code generated:', newCode);
         }
         
-        // Calculate time left until next code
         const now = Math.floor(Date.now() / 1000);
         const remaining = 30 - (now % 30);
         setTimeLeft(remaining);
-        
-        // Code is "ready" if it has more than 20 seconds left (fresh code)
         setIsReady(remaining > 20);
       } catch (error) {
         console.error('TOTP generation error:', error);
       }
     };
 
-    // Update immediately
     updateCode();
-
-    // Update every second
     const interval = setInterval(updateCode, 1000);
-
     return () => clearInterval(interval);
-  }, [email]);
+  }, [email, onCodeChange]);
 
   if (!DEMO_TOTP_SECRETS[email]) {
     return null;
