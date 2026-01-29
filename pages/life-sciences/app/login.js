@@ -1,7 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CONFIG } from "@/lib/life_sciences_app_lib/config";
 import TOTPGenerator from "@/components/TOTPGenerator";
 
@@ -37,10 +37,30 @@ export const USER_CREDENTIALS = {
   },
 };
 
+const MOBILE_BREAKPOINT_PX = 768;
+
 export default function ProductionLoginPage() {
   const router = useRouter();
   const [copiedField, setCopiedField] = useState(null);
   const [approverMfaVisible, setApproverMfaVisible] = useState(null); // Track which approver MFA to show prominently
+  const [isMobile, setIsMobile] = useState(false);
+  const inlineMfaRef = useRef(null);
+
+  // Detect mobile viewport for MFA layout and Cognito open behavior
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX}px)`);
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // On mobile, scroll inline MFA into view when it appears
+  useEffect(() => {
+    if (!approverMfaVisible || !isMobile || !inlineMfaRef.current) return;
+    inlineMfaRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [approverMfaVisible, isMobile]);
 
   // Check if user is already logged in - redirect to app
   // BUT: If there's a ?force=true query param or logout flag, always show login page
@@ -244,54 +264,38 @@ export default function ProductionLoginPage() {
       });
     };
     
-    // Clear session, then open login popup
+    // Clear session, then open login popup/tab
     clearCognitoSession().then(() => {
-      // Open in new window/tab - user can see MFA codes and credentials on original page
-      // Add a timestamp to the window name to prevent browser from reusing the same window
-      const windowName = `CognitoLogin_${Date.now()}`;
-      const cognitoWindow = window.open(
-        cognitoUrl,
-        windowName,
-        "width=600,height=700,scrollbars=yes,resizable=yes"
-      );
-      
-      // Focus on new window but keep original page visible
+      // On mobile: open in new tab (_blank) so this page stays visible for MFA.
+      // On desktop: open in named popup.
+      const useNewTab = isMobile;
+      const windowTarget = useNewTab ? "_blank" : `CognitoLogin_${Date.now()}`;
+      const windowFeatures = useNewTab ? "noopener,noreferrer" : "width=600,height=700,scrollbars=yes,resizable=yes";
+      const cognitoWindow = window.open(cognitoUrl, windowTarget, windowFeatures);
+
       if (cognitoWindow) {
-        // Don't focus immediately - let user see the sticky MFA box first
-        setTimeout(() => {
-          cognitoWindow.focus();
-        }, 1000);
-        
-        // Monitor when popup closes or navigates away (login success)
-        const checkClosed = setInterval(() => {
-          if (cognitoWindow.closed) {
-            clearInterval(checkClosed);
-            setApproverMfaVisible(null);
-            sessionStorage.removeItem("vdc_approver_mfa_needed");
-            sessionStorage.removeItem("vdc_selected_user");
-          } else {
-            // Check if popup has navigated to callback (login success)
-            try {
-              const popupUrl = cognitoWindow.location.href;
-              if (popupUrl && popupUrl.includes("/callback")) {
-                clearInterval(checkClosed);
-                // Don't clear MFA box yet - wait for callback to complete
-                // The callback will send a message to close it
-              }
-            } catch (e) {
-              // Cross-origin error - popup is on Cognito domain, can't access
-              // This is normal, continue checking
+        if (!useNewTab) {
+          setTimeout(() => cognitoWindow.focus(), 1000);
+          const checkClosed = setInterval(() => {
+            if (cognitoWindow.closed) {
+              clearInterval(checkClosed);
+              setApproverMfaVisible(null);
+              sessionStorage.removeItem("vdc_approver_mfa_needed");
+              sessionStorage.removeItem("vdc_selected_user");
+            } else {
+              try {
+                if (cognitoWindow.location.href && cognitoWindow.location.href.includes("/callback")) clearInterval(checkClosed);
+              } catch (_) {}
             }
-          }
-        }, 500);
-      } else {
-        // If popup blocked, fall back to same window redirect with warning
-        const proceed = confirm("Popup blocked. If you proceed, this page will redirect and you'll need to open this login page in another tab to see MFA codes.\n\nClick OK to proceed, or Cancel to allow popups and try again.");
-        if (proceed) {
-          window.location.href = cognitoUrl;
-        } else {
-          setApproverMfaVisible(null); // Clear if cancelled
+          }, 500);
         }
+      } else {
+        const msg = useNewTab
+          ? "Popup/tab blocked. Allow pop-ups for this site, then try again."
+          : "Popup blocked. If you proceed, this page will redirect and you'll need to open this login page in another tab to see MFA codes.\n\nClick OK to proceed, or Cancel to allow popups and try again.";
+        const proceed = confirm(msg);
+        if (proceed) window.location.href = cognitoUrl;
+        else setApproverMfaVisible(null);
       }
     });
   }
@@ -304,8 +308,8 @@ export default function ProductionLoginPage() {
       </Head>
 
       <div style={styles.page}>
-        {/* Sticky MFA & Credentials Display (shown when login window is open for any user) */}
-        {approverMfaVisible && (
+        {/* Sticky MFA (desktop only): top-right when login popup is open */}
+        {approverMfaVisible && !isMobile && (
           <div style={styles.stickyMfaContainer}>
             <div style={styles.stickyMfaBox}>
               <div style={styles.stickyMfaHeader}>
@@ -327,7 +331,6 @@ export default function ProductionLoginPage() {
                   Expected: <code style={styles.stickyMfaEmailCode}>{USER_CREDENTIALS[approverMfaVisible].email}</code><br />
                   <small>If the Cognito popup shows a different email, clear it and type the correct one above.</small>
                 </div>
-                {/* Credentials for this role (email + password) */}
                 <div style={styles.credentialsSection}>
                   <div style={styles.credentialField}>
                     <div style={styles.fieldLabel}>Email:</div>
@@ -414,7 +417,7 @@ export default function ProductionLoginPage() {
               <div style={styles.noticeTitle}>🔐 Authorized Users Only</div>
               <div style={styles.noticeText}>
                 <strong>Only the following four user accounts are authorized to access this system.</strong><br />
-                Select a role below to open the Cognito login page and show credentials + MFA for that role in the top-right panel.
+                Select a role below to open the Cognito login page and show credentials + MFA for that role{isMobile ? " in the section below" : " in the top-right panel"}.
               </div>
               <div style={styles.roleButtonsContainer}>
                 <button
@@ -462,6 +465,68 @@ export default function ProductionLoginPage() {
                 <strong>Your own email address will NOT work.</strong> You must use one of the four accounts listed above.
               </div>
             </div>
+
+            {/* Inline MFA (mobile only): same content as sticky, in-page so it's always visible */}
+            {approverMfaVisible && isMobile && (
+              <div ref={inlineMfaRef} style={styles.inlineMfaContainer}>
+                <div style={styles.inlineMfaBox}>
+                  <div style={styles.stickyMfaHeader}>
+                    <div style={styles.stickyMfaTitle}>
+                      🔐 MFA Code for {USER_CREDENTIALS[approverMfaVisible].displayName}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setApproverMfaVisible(null)}
+                      style={styles.stickyMfaClose}
+                      title="Close"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div style={styles.stickyMfaContent}>
+                    <div style={styles.stickyMfaEmailWarning}>
+                      <strong>⚠️ Verify email in Cognito tab:</strong><br />
+                      Expected: <code style={styles.stickyMfaEmailCode}>{USER_CREDENTIALS[approverMfaVisible].email}</code><br />
+                      <small>If the Cognito tab shows a different email, clear it and type the correct one.</small>
+                    </div>
+                    <div style={styles.credentialsSection}>
+                      <div style={styles.credentialField}>
+                        <div style={styles.fieldLabel}>Email:</div>
+                        <div style={styles.fieldValue}>
+                          <code style={styles.code}>{USER_CREDENTIALS[approverMfaVisible].email}</code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(USER_CREDENTIALS[approverMfaVisible].email, `${approverMfaVisible}-email`)}
+                            style={styles.copyButton}
+                            title="Copy email"
+                          >
+                            {copiedField === `${approverMfaVisible}-email` ? "✓" : "📋"}
+                          </button>
+                        </div>
+                      </div>
+                      <div style={styles.credentialField}>
+                        <div style={styles.fieldLabel}>Password:</div>
+                        <div style={styles.fieldValue}>
+                          <code style={styles.code}>{USER_CREDENTIALS[approverMfaVisible].password}</code>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(USER_CREDENTIALS[approverMfaVisible].password, `${approverMfaVisible}-password`)}
+                            style={styles.copyButton}
+                            title="Copy password"
+                          >
+                            {copiedField === `${approverMfaVisible}-password` ? "✓" : "📋"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <TOTPGenerator email={USER_CREDENTIALS[approverMfaVisible].email} />
+                    <div style={styles.stickyMfaInstructions}>
+                      <strong>Keep this tab open.</strong> Cognito opened in a new tab. Switch back here to copy the MFA code when prompted.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Footer Note */}
             <div style={styles.footerNote}>
@@ -813,6 +878,19 @@ const styles = {
     borderRadius: 8,
     fontSize: 13,
     lineHeight: 1.5,
+  },
+  inlineMfaContainer: {
+    width: "100%",
+    marginTop: 20,
+    marginBottom: 24,
+    scrollMarginTop: 80,
+  },
+  inlineMfaBox: {
+    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    borderRadius: 16,
+    padding: 20,
+    boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+    border: "2px solid rgba(255,255,255,0.3)",
   },
   roleButtonsContainer: {
     display: "flex",
