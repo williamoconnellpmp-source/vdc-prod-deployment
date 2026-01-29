@@ -77,7 +77,7 @@ export default function HomePage() {
             <div className="cardsContainer">
               <div className="cardsGrid">
                 {/* 1 — VDC Demo (FIXED) */}
-                <Link href="/vdc" passHref legacyBehavior>
+                <Link href="/vdc/" passHref legacyBehavior>
                   <a className="card">
                     <div className="cardTitle">VDC Demo</div>
                     <div className="cardText">

@@ -2,7 +2,8 @@ import Head from "next/head";
 import Link from "next/link";
 
 // Point to the production login page with MFA support (Cognito)
-const VDC_LOGIN_URL = "/life-sciences/app/login?returnTo=%2Flife-sciences%2Fapp";
+// Trailing slash required for static export (next.config trailingSlash: true)
+const VDC_LOGIN_URL = "/life-sciences/app/login/?returnTo=%2Flife-sciences%2Fapp";
 
 export default function VDCDemoPage() {
   return (

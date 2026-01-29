@@ -14,10 +14,13 @@ const DEMO_TOTP_SECRETS = {
   'williamoconnellpmp+approver2@gmail.com': 'A6QQFOCIIN5KKFBPW2EBNCTQAKBAK6BGUFWWWP3A2FKCHY6FYU6Q'
 };
 
-export default function TOTPGenerator({ email }) {
+export default function TOTPGenerator({ email, onCopyMfa, copiedField, fieldPrefix }) {
   const [code, setCode] = useState('------');
   const [timeLeft, setTimeLeft] = useState(30);
   const [isReady, setIsReady] = useState(false);
+  const showCopy = !!onCopyMfa && code !== '------';
+  const mfaKey = fieldPrefix ? `${fieldPrefix}-mfa` : 'mfa';
+  const isCopied = copiedField === mfaKey;
 
   useEffect(() => {
     if (!DEMO_TOTP_SECRETS[email]) return;
@@ -126,6 +129,29 @@ export default function TOTPGenerator({ email }) {
         
         .totp-display {
           text-align: center;
+        }
+        
+        .totp-code-row {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+        
+        .totp-copy-btn {
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.3);
+          background: rgba(255,255,255,0.15);
+          color: #fff;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: 0.9rem;
+        }
+        
+        .totp-copy-btn:hover {
+          background: rgba(255,255,255,0.25);
         }
         
         .totp-label {

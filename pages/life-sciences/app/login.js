@@ -192,112 +192,86 @@ export default function ProductionLoginPage() {
     });
   }
 
-  function handleUserSelect(userKey, openCognito = true) {
-    const user = USER_CREDENTIALS[userKey];
+  function clearCognitoSession() {
+    return new Promise((resolve) => {
+      if (typeof window === "undefined") { resolve(); return; }
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      if (isLocalhost) { resolve(); return; }
+      try {
+        const logoutUrl = `${CONFIG.cognitoDomain}/logout?` +
+          `client_id=${CONFIG.clientId}&` +
+          `logout_uri=${encodeURIComponent(window.location.origin + "/life-sciences/app/login/")}`;
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = logoutUrl;
+        document.body.appendChild(iframe);
+        setTimeout(() => { document.body.removeChild(iframe); resolve(); }, 1000);
+      } catch (e) { console.warn("Could not clear Cognito session:", e); resolve(); }
+    });
+  }
 
-    // Store selected user info for reference (not for auto-fill per GxP)
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("vdc_selected_user", userKey);
-      // Store MFA flag (used by callback / other flows)
-      if (user.requiresMFA) {
-        sessionStorage.setItem("vdc_approver_mfa_needed", "true");
-      }
-    }
-    
-    // Only proceed with Cognito login if explicitly requested
-    if (!openCognito) {
-      return;
-    }
-    
-    // Build Cognito login URL
+  function buildCognitoUrl(userKey) {
+    const user = USER_CREDENTIALS[userKey];
+    if (!user) return null;
     const returnTo = router.query.returnTo || (user.role === "Approver" ? "/life-sciences/app/approval/approvals" : "/life-sciences/app");
-    const redirectUri = CONFIG.redirectUri;
-    
     const params = new URLSearchParams({
       client_id: CONFIG.clientId,
       response_type: "code",
       scope: CONFIG.scopes.join(" "),
-      redirect_uri: redirectUri,
+      redirect_uri: CONFIG.redirectUri,
       state: returnTo,
-      login_hint: user.email, // Hint to Cognito which email to use (helps with autofill)
-      prompt: "login", // Force Cognito to show login page even if user has active session
+      login_hint: user.email,
+      prompt: "login",
     });
-    
-    // Add timestamp to URL to make it unique and prevent Cognito from using cached session
-    const timestamp = Date.now();
-    const cognitoUrl = `${CONFIG.cognitoDomain}/oauth2/authorize?${params.toString()}&_t=${timestamp}`;
-    
-    // Show prominent MFA & credentials for this user in the sticky panel
+    return `${CONFIG.cognitoDomain}/oauth2/authorize?${params.toString()}&_t=${Date.now()}`;
+  }
+
+  function handleUserSelect(userKey, openCognito = true) {
+    const user = USER_CREDENTIALS[userKey];
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("vdc_selected_user", userKey);
+      if (user.requiresMFA) sessionStorage.setItem("vdc_approver_mfa_needed", "true");
+    }
     setApproverMfaVisible(userKey);
-    
-    // First, try to clear Cognito session by opening logout in hidden iframe
-    // This helps prevent Cognito from auto-logging in with previous session
-    const clearCognitoSession = () => {
-      return new Promise((resolve) => {
-        // For localhost, skip Cognito logout (may not be registered)
-        const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-        if (isLocalhost) {
-          resolve();
-          return;
-        }
-        
-        try {
-          const logoutUrl = `${CONFIG.cognitoDomain}/logout?` +
-            `client_id=${CONFIG.clientId}&` +
-            `logout_uri=${encodeURIComponent(window.location.origin + "/life-sciences/app/login")}`;
-          
-          // Create hidden iframe to clear Cognito session
-          const iframe = document.createElement("iframe");
-          iframe.style.display = "none";
-          iframe.src = logoutUrl;
-          document.body.appendChild(iframe);
-          
-          // Wait a bit for logout to complete, then remove iframe
-          setTimeout(() => {
-            document.body.removeChild(iframe);
-            resolve();
-          }, 1000);
-        } catch (e) {
-          console.warn("Could not clear Cognito session:", e);
-          resolve(); // Continue anyway
-        }
-      });
-    };
-    
-    // Clear session, then open login popup/tab
+
+    if (!openCognito) return;
+
+    const cognitoUrl = buildCognitoUrl(userKey);
+    if (!cognitoUrl) return;
+
     clearCognitoSession().then(() => {
-      // On mobile: open in new tab (_blank) so this page stays visible for MFA.
-      // On desktop: open in named popup.
-      const useNewTab = isMobile;
-      const windowTarget = useNewTab ? "_blank" : `CognitoLogin_${Date.now()}`;
-      const windowFeatures = useNewTab ? "noopener,noreferrer" : "width=600,height=700,scrollbars=yes,resizable=yes";
-      const cognitoWindow = window.open(cognitoUrl, windowTarget, windowFeatures);
+      const windowTarget = `CognitoLogin_${Date.now()}`;
+      const cognitoWindow = window.open(cognitoUrl, windowTarget, "width=600,height=700,scrollbars=yes,resizable=yes");
 
       if (cognitoWindow) {
-        if (!useNewTab) {
-          setTimeout(() => cognitoWindow.focus(), 1000);
-          const checkClosed = setInterval(() => {
-            if (cognitoWindow.closed) {
-              clearInterval(checkClosed);
-              setApproverMfaVisible(null);
-              sessionStorage.removeItem("vdc_approver_mfa_needed");
-              sessionStorage.removeItem("vdc_selected_user");
-            } else {
-              try {
-                if (cognitoWindow.location.href && cognitoWindow.location.href.includes("/callback")) clearInterval(checkClosed);
-              } catch (_) {}
-            }
-          }, 500);
-        }
+        setTimeout(() => cognitoWindow.focus(), 1000);
+        const checkClosed = setInterval(() => {
+          if (cognitoWindow.closed) {
+            clearInterval(checkClosed);
+            setApproverMfaVisible(null);
+            sessionStorage.removeItem("vdc_approver_mfa_needed");
+            sessionStorage.removeItem("vdc_selected_user");
+          } else {
+            try {
+              if (cognitoWindow.location.href && cognitoWindow.location.href.includes("/callback")) clearInterval(checkClosed);
+            } catch (_) {}
+          }
+        }, 500);
       } else {
-        const msg = useNewTab
-          ? "Popup/tab blocked. Allow pop-ups for this site, then try again."
-          : "Popup blocked. If you proceed, this page will redirect and you'll need to open this login page in another tab to see MFA codes.\n\nClick OK to proceed, or Cancel to allow popups and try again.";
-        const proceed = confirm(msg);
+        const proceed = confirm(
+          "Popup blocked. If you proceed, this page will redirect and you'll need to open this login page in another tab to see MFA codes.\n\nClick OK to proceed, or Cancel to allow popups and try again."
+        );
         if (proceed) window.location.href = cognitoUrl;
         else setApproverMfaVisible(null);
       }
     });
+  }
+
+  function handleMobileContinueToCognito() {
+    if (!approverMfaVisible) return;
+    const cognitoUrl = buildCognitoUrl(approverMfaVisible);
+    if (!cognitoUrl) return;
+    clearCognitoSession().then(() => { window.location.href = cognitoUrl; });
   }
 
   return (
@@ -417,12 +391,12 @@ export default function ProductionLoginPage() {
               <div style={styles.noticeTitle}>🔐 Authorized Users Only</div>
               <div style={styles.noticeText}>
                 <strong>Only the following four user accounts are authorized to access this system.</strong><br />
-                Select a role below to open the Cognito login page and show credentials + MFA for that role{isMobile ? " in the section below" : " in the top-right panel"}.
+                Select a role below to {isMobile ? "see credentials + MFA, then tap Continue to open Cognito" : "open the Cognito login page and show credentials + MFA in the top-right panel"}.
               </div>
               <div style={styles.roleButtonsContainer}>
                 <button
                   type="button"
-                  onClick={() => handleUserSelect("submitter1", true)}
+                  onClick={() => handleUserSelect("submitter1", !isMobile)}
                   style={{
                     ...styles.roleButton,
                     ...(approverMfaVisible === "submitter1" ? styles.roleButtonActive : {})
@@ -432,7 +406,7 @@ export default function ProductionLoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleUserSelect("submitter2", true)}
+                  onClick={() => handleUserSelect("submitter2", !isMobile)}
                   style={{
                     ...styles.roleButton,
                     ...(approverMfaVisible === "submitter2" ? styles.roleButtonActive : {})
@@ -442,7 +416,7 @@ export default function ProductionLoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleUserSelect("approver1", true)}
+                  onClick={() => handleUserSelect("approver1", !isMobile)}
                   style={{
                     ...styles.roleButton,
                     ...(approverMfaVisible === "approver1" ? styles.roleButtonActive : {})
@@ -452,7 +426,7 @@ export default function ProductionLoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleUserSelect("approver2", true)}
+                  onClick={() => handleUserSelect("approver2", !isMobile)}
                   style={{
                     ...styles.roleButton,
                     ...(approverMfaVisible === "approver2" ? styles.roleButtonActive : {})
@@ -485,9 +459,8 @@ export default function ProductionLoginPage() {
                   </div>
                   <div style={styles.stickyMfaContent}>
                     <div style={styles.stickyMfaEmailWarning}>
-                      <strong>⚠️ Verify email in Cognito tab:</strong><br />
-                      Expected: <code style={styles.stickyMfaEmailCode}>{USER_CREDENTIALS[approverMfaVisible].email}</code><br />
-                      <small>If the Cognito tab shows a different email, clear it and type the correct one.</small>
+                      <strong>📱 Mobile: Copy all three, then tap Continue.</strong><br />
+                      Expected email: <code style={styles.stickyMfaEmailCode}>{USER_CREDENTIALS[approverMfaVisible].email}</code>
                     </div>
                     <div style={styles.credentialsSection}>
                       <div style={styles.credentialField}>
@@ -519,10 +492,24 @@ export default function ProductionLoginPage() {
                         </div>
                       </div>
                     </div>
-                    <TOTPGenerator email={USER_CREDENTIALS[approverMfaVisible].email} />
+                    <TOTPGenerator
+                      email={USER_CREDENTIALS[approverMfaVisible].email}
+                      onCopyMfa={(code) => code && copyToClipboard(code, `${approverMfaVisible}-mfa`)}
+                      copiedField={copiedField}
+                      fieldPrefix={approverMfaVisible}
+                    />
                     <div style={styles.stickyMfaInstructions}>
-                      <strong>Keep this tab open.</strong> Cognito opened in a new tab. Switch back here to copy the MFA code when prompted.
+                      <strong>1.</strong> Copy email, password, and MFA code above.<br />
+                      <strong>2.</strong> Tap <strong>Continue to Cognito</strong> below. You will leave this page.<br />
+                      <strong>3.</strong> Paste when Cognito asks. No popups.
                     </div>
+                    <button
+                      type="button"
+                      onClick={handleMobileContinueToCognito}
+                      style={styles.continueToCognitoButton}
+                    >
+                      Continue to Cognito →
+                    </button>
                   </div>
                 </div>
               </div>
@@ -533,17 +520,19 @@ export default function ProductionLoginPage() {
               <div style={styles.footerTitle}>📝 Instructions:</div>
               <div style={styles.footerText}>
                 <strong>MFA is required for all users.</strong><br /><br />
-                
-                1. Click one of the role buttons above (Submitter 1, Submitter 2, Approver 1, or Approver 2).<br />
-                2. Copy the email and password shown, then click "Sign in with Cognito".<br />
-                3. A popup window will open with the Cognito login page - <strong>keep this page open!</strong><br />
-                4. Paste the email and password into the Cognito login form.<br />
-                5. When Cognito asks for MFA, a <strong>sticky MFA code box</strong> will appear on this page (top right).<br />
-                6. Copy the 6-digit MFA code from the sticky box and paste it into Cognito.<br />
-                7. <strong>Important:</strong> Keep this page visible so you can see the MFA code - it updates every 30 seconds!<br /><br />
-                
-                <strong>Note:</strong> Fields are not auto-populated in accordance with GxP best practices, 
-                even though this demonstration violates other GxP requirements for credential display.
+                {isMobile ? (
+                  <>
+                    <strong>Mobile:</strong> Tap a role → copy email, password, and MFA code → tap &quot;Continue to Cognito&quot; → paste when Cognito asks. No popups.
+                  </>
+                ) : (
+                  <>
+                    1. Click a role (Submitter 1/2, Approver 1/2). A popup opens with Cognito.<br />
+                    2. Copy email, password, and MFA from the top-right panel. <strong>Keep this page open!</strong><br />
+                    3. Paste into Cognito when prompted. MFA code updates every 30 seconds.
+                  </>
+                )}
+                <br /><br />
+                <strong>Note:</strong> Your own email will not work. Use one of the four demo accounts above.
               </div>
             </div>
           </div>
@@ -891,6 +880,18 @@ const styles = {
     padding: 20,
     boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
     border: "2px solid rgba(255,255,255,0.3)",
+  },
+  continueToCognitoButton: {
+    width: "100%",
+    marginTop: 16,
+    padding: "14px 24px",
+    borderRadius: 12,
+    border: "2px solid rgba(255,255,255,0.4)",
+    background: "rgba(34, 197, 94, 0.9)",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 16,
+    cursor: "pointer",
   },
   roleButtonsContainer: {
     display: "flex",
