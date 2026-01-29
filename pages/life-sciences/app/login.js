@@ -1,7 +1,7 @@
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { CONFIG } from "@/lib/life_sciences_app_lib/config";
 import TOTPGenerator from "@/components/TOTPGenerator";
 
@@ -42,14 +42,10 @@ const MOBILE_BREAKPOINT_PX = 768;
 export default function ProductionLoginPage() {
   const router = useRouter();
   const [copiedField, setCopiedField] = useState(null);
-  const [approverMfaVisible, setApproverMfaVisible] = useState(null);
-  const [currentMfaCode, setCurrentMfaCode] = useState("");
+  const [approverMfaVisible, setApproverMfaVisible] = useState(null); // Track which approver MFA to show prominently
   const [isMobile, setIsMobile] = useState(false);
-  const inlineMfaRef = useRef(null);
 
-  const onMfaCodeChange = useCallback((code) => setCurrentMfaCode(code || ""), []);
-
-  // Detect mobile viewport for MFA layout and Cognito open behavior
+  // Detect mobile viewport (show desktop-optimized message when user clicks a role)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX}px)`);
@@ -58,12 +54,6 @@ export default function ProductionLoginPage() {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
-
-  // On mobile, scroll inline MFA into view when it appears
-  useEffect(() => {
-    if (!approverMfaVisible || !isMobile || !inlineMfaRef.current) return;
-    inlineMfaRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [approverMfaVisible, isMobile]);
 
   // Check if user is already logged in - redirect to app
   // BUT: If there's a ?force=true query param or logout flag, always show login page
@@ -195,56 +185,86 @@ export default function ProductionLoginPage() {
     });
   }
 
-  function clearCognitoSession() {
-    return new Promise((resolve) => {
-      if (typeof window === "undefined") { resolve(); return; }
-      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      if (isLocalhost) { resolve(); return; }
-      try {
-        const logoutUrl = `${CONFIG.cognitoDomain}/logout?` +
-          `client_id=${CONFIG.clientId}&` +
-          `logout_uri=${encodeURIComponent(window.location.origin + "/life-sciences/app/login/")}`;
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        iframe.src = logoutUrl;
-        document.body.appendChild(iframe);
-        setTimeout(() => { document.body.removeChild(iframe); resolve(); }, 1000);
-      } catch (e) { console.warn("Could not clear Cognito session:", e); resolve(); }
-    });
-  }
-
-  function buildCognitoUrl(userKey) {
+  function handleUserSelect(userKey, openCognito = true) {
     const user = USER_CREDENTIALS[userKey];
-    if (!user) return null;
+
+    // Store selected user info for reference (not for auto-fill per GxP)
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("vdc_selected_user", userKey);
+      // Store MFA flag (used by callback / other flows)
+      if (user.requiresMFA) {
+        sessionStorage.setItem("vdc_approver_mfa_needed", "true");
+      }
+    }
+    
+    // Only proceed with Cognito login if explicitly requested
+    if (!openCognito) {
+      return;
+    }
+    
+    // Build Cognito login URL
     const returnTo = router.query.returnTo || (user.role === "Approver" ? "/life-sciences/app/approval/approvals" : "/life-sciences/app");
+    const redirectUri = CONFIG.redirectUri;
+    
     const params = new URLSearchParams({
       client_id: CONFIG.clientId,
       response_type: "code",
       scope: CONFIG.scopes.join(" "),
-      redirect_uri: CONFIG.redirectUri,
+      redirect_uri: redirectUri,
       state: returnTo,
-      login_hint: user.email,
-      prompt: "login",
+      login_hint: user.email, // Hint to Cognito which email to use (helps with autofill)
+      prompt: "login", // Force Cognito to show login page even if user has active session
     });
-    return `${CONFIG.cognitoDomain}/oauth2/authorize?${params.toString()}&_t=${Date.now()}`;
-  }
-
-  function handleUserSelect(userKey, openCognito = true) {
-    const user = USER_CREDENTIALS[userKey];
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("vdc_selected_user", userKey);
-      if (user.requiresMFA) sessionStorage.setItem("vdc_approver_mfa_needed", "true");
-    }
+    
+    // Add timestamp to URL to make it unique and prevent Cognito from using cached session
+    const timestamp = Date.now();
+    const cognitoUrl = `${CONFIG.cognitoDomain}/oauth2/authorize?${params.toString()}&_t=${timestamp}`;
+    
+    // Show prominent MFA & credentials for this user in the sticky panel
     setApproverMfaVisible(userKey);
-
-    if (!openCognito) return;
-
-    const cognitoUrl = buildCognitoUrl(userKey);
-    if (!cognitoUrl) return;
-
+    
+    // First, try to clear Cognito session by opening logout in hidden iframe
+    // This helps prevent Cognito from auto-logging in with previous session
+    const clearCognitoSession = () => {
+      return new Promise((resolve) => {
+        // For localhost, skip Cognito logout (may not be registered)
+        const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+        if (isLocalhost) {
+          resolve();
+          return;
+        }
+        
+        try {
+          const logoutUrl = `${CONFIG.cognitoDomain}/logout?` +
+            `client_id=${CONFIG.clientId}&` +
+            `logout_uri=${encodeURIComponent(window.location.origin + "/life-sciences/app/login")}`;
+          
+          // Create hidden iframe to clear Cognito session
+          const iframe = document.createElement("iframe");
+          iframe.style.display = "none";
+          iframe.src = logoutUrl;
+          document.body.appendChild(iframe);
+          
+          // Wait a bit for logout to complete, then remove iframe
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+            resolve();
+          }, 1000);
+        } catch (e) {
+          console.warn("Could not clear Cognito session:", e);
+          resolve(); // Continue anyway
+        }
+      });
+    };
+    
+    // Clear session, then open login popup
     clearCognitoSession().then(() => {
-      const windowTarget = `CognitoLogin_${Date.now()}`;
-      const cognitoWindow = window.open(cognitoUrl, windowTarget, "width=600,height=700,scrollbars=yes,resizable=yes");
+      const windowName = `CognitoLogin_${Date.now()}`;
+      const cognitoWindow = window.open(
+        cognitoUrl,
+        windowName,
+        "width=600,height=700,scrollbars=yes,resizable=yes"
+      );
 
       if (cognitoWindow) {
         setTimeout(() => cognitoWindow.focus(), 1000);
@@ -261,29 +281,11 @@ export default function ProductionLoginPage() {
           }
         }, 500);
       } else {
-        const proceed = confirm(
-          "Popup blocked. If you proceed, this page will redirect and you'll need to open this login page in another tab to see MFA codes.\n\nClick OK to proceed, or Cancel to allow popups and try again."
-        );
+        const proceed = confirm("Popup blocked. If you proceed, this page will redirect and you'll need to open this login page in another tab to see MFA codes.\n\nClick OK to proceed, or Cancel to allow popups and try again.");
         if (proceed) window.location.href = cognitoUrl;
         else setApproverMfaVisible(null);
       }
     });
-  }
-
-  function handleMobileContinueToCognito() {
-    if (!approverMfaVisible) return;
-    const cognitoUrl = buildCognitoUrl(approverMfaVisible);
-    if (!cognitoUrl) return;
-    clearCognitoSession().then(() => { window.location.href = cognitoUrl; });
-  }
-
-  function handleCopyAll() {
-    if (!approverMfaVisible) return;
-    const u = USER_CREDENTIALS[approverMfaVisible];
-    if (!u) return;
-    const mfa = currentMfaCode && currentMfaCode.length === 6 ? currentMfaCode : "(wait for MFA – tap Copy all again)";
-    const block = `${u.email}\n${u.password}\n${mfa}`;
-    copyToClipboard(block, "copy-all");
   }
 
   return (
@@ -294,8 +296,8 @@ export default function ProductionLoginPage() {
       </Head>
 
       <div style={styles.page}>
-        {/* Sticky MFA (desktop only): top-right when login popup is open */}
-        {approverMfaVisible && !isMobile && (
+        {/* Sticky MFA & Credentials (shown when login window is open) */}
+        {approverMfaVisible && (
           <div style={styles.stickyMfaContainer}>
             <div style={styles.stickyMfaBox}>
               <div style={styles.stickyMfaHeader}>
@@ -403,12 +405,12 @@ export default function ProductionLoginPage() {
               <div style={styles.noticeTitle}>🔐 Authorized Users Only</div>
               <div style={styles.noticeText}>
                 <strong>Only the following four user accounts are authorized to access this system.</strong><br />
-                Select a role below to {isMobile ? "see credentials + MFA, then tap Continue to open Cognito" : "open the Cognito login page and show credentials + MFA in the top-right panel"}.
+                Select a role below to open the Cognito login page and show credentials + MFA for that role in the top-right panel.
               </div>
               <div style={styles.roleButtonsContainer}>
                 <button
                   type="button"
-                  onClick={() => handleUserSelect("submitter1", !isMobile)}
+                  onClick={() => handleUserSelect("submitter1", true)}
                   style={{
                     ...styles.roleButton,
                     ...(approverMfaVisible === "submitter1" ? styles.roleButtonActive : {})
@@ -418,7 +420,7 @@ export default function ProductionLoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleUserSelect("submitter2", !isMobile)}
+                  onClick={() => handleUserSelect("submitter2", true)}
                   style={{
                     ...styles.roleButton,
                     ...(approverMfaVisible === "submitter2" ? styles.roleButtonActive : {})
@@ -428,7 +430,7 @@ export default function ProductionLoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleUserSelect("approver1", !isMobile)}
+                  onClick={() => handleUserSelect("approver1", true)}
                   style={{
                     ...styles.roleButton,
                     ...(approverMfaVisible === "approver1" ? styles.roleButtonActive : {})
@@ -438,7 +440,7 @@ export default function ProductionLoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleUserSelect("approver2", !isMobile)}
+                  onClick={() => handleUserSelect("approver2", true)}
                   style={{
                     ...styles.roleButton,
                     ...(approverMfaVisible === "approver2" ? styles.roleButtonActive : {})
@@ -452,101 +454,22 @@ export default function ProductionLoginPage() {
               </div>
             </div>
 
-            {/* Inline MFA (mobile only): same content as sticky, in-page so it's always visible */}
-            {approverMfaVisible && isMobile && (
-              <div ref={inlineMfaRef} style={styles.inlineMfaContainer}>
-                <div style={styles.inlineMfaBox}>
-                  <div style={styles.stickyMfaHeader}>
-                    <div style={styles.stickyMfaTitle}>
-                      🔐 MFA Code for {USER_CREDENTIALS[approverMfaVisible].displayName}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setApproverMfaVisible(null)}
-                      style={styles.stickyMfaClose}
-                      title="Close"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div style={styles.stickyMfaContent}>
-                    <div style={styles.stickyMfaEmailWarning}>
-                      <strong>📱 Mobile: Copy all three, then tap Continue.</strong><br />
-                      Expected email: <code style={styles.stickyMfaEmailCode}>{USER_CREDENTIALS[approverMfaVisible].email}</code>
-                    </div>
-                    <div style={styles.credentialsSection}>
-                      <div style={styles.credentialField}>
-                        <div style={styles.fieldLabel}>Email:</div>
-                        <div style={styles.fieldValue}>
-                          <code style={styles.code}>{USER_CREDENTIALS[approverMfaVisible].email}</code>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(USER_CREDENTIALS[approverMfaVisible].email, `${approverMfaVisible}-email`)}
-                            style={styles.copyButton}
-                            title="Copy email"
-                          >
-                            {copiedField === `${approverMfaVisible}-email` ? "✓" : "📋"}
-                          </button>
-                        </div>
-                      </div>
-                      <div style={styles.credentialField}>
-                        <div style={styles.fieldLabel}>Password:</div>
-                        <div style={styles.fieldValue}>
-                          <code style={styles.code}>{USER_CREDENTIALS[approverMfaVisible].password}</code>
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(USER_CREDENTIALS[approverMfaVisible].password, `${approverMfaVisible}-password`)}
-                            style={styles.copyButton}
-                            title="Copy password"
-                          >
-                            {copiedField === `${approverMfaVisible}-password` ? "✓" : "📋"}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <TOTPGenerator
-                      email={USER_CREDENTIALS[approverMfaVisible].email}
-                      onCopyMfa={(code) => code && copyToClipboard(code, `${approverMfaVisible}-mfa`)}
-                      copiedField={copiedField}
-                      fieldPrefix={approverMfaVisible}
-                      onCodeChange={onMfaCodeChange}
-                    />
-                    <div style={styles.stickyMfaInstructions}>
-                      <strong>1.</strong> Tap <strong>Copy all</strong> above (wait for MFA if it says &quot;wait&quot;).<br />
-                      <strong>2.</strong> Paste into Notes. Line 1 = email, line 2 = password, line 3 = MFA.<br />
-                      <strong>3.</strong> Tap <strong>Continue to Cognito</strong>. You will leave this page.<br />
-                      <strong>4.</strong> In Cognito, copy line 1, 2, or 3 from Notes when asked. No popups.
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleMobileContinueToCognito}
-                      style={styles.continueToCognitoButton}
-                    >
-                      Continue to Cognito →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Footer Note */}
             <div style={styles.footerNote}>
               <div style={styles.footerTitle}>📝 Instructions:</div>
               <div style={styles.footerText}>
                 <strong>MFA is required for all users.</strong><br /><br />
-                {isMobile ? (
-                  <>
-                    <strong>Mobile:</strong> Tap a role → <strong>Copy all</strong> → paste into Notes → tap <strong>Continue to Cognito</strong> → in Cognito, copy each from Notes when asked. No popups.
-                  </>
-                ) : (
-                  <>
-                    1. Click a role (Submitter 1/2, Approver 1/2). A popup opens with Cognito.<br />
-                    2. Copy email, password, and MFA from the top-right panel. <strong>Keep this page open!</strong><br />
-                    3. Paste into Cognito when prompted. MFA code updates every 30 seconds.
-                  </>
-                )}
-                <br /><br />
-                <strong>Note:</strong> Your own email will not work. Use one of the four demo accounts above.
+                
+                1. Click one of the role buttons above (Submitter 1, Submitter 2, Approver 1, or Approver 2).<br />
+                2. Copy the email and password shown, then click "Sign in with Cognito".<br />
+                3. A popup window will open with the Cognito login page - <strong>keep this page open!</strong><br />
+                4. Paste the email and password into the Cognito login form.<br />
+                5. When Cognito asks for MFA, a <strong>sticky MFA code box</strong> will appear on this page (top right).<br />
+                6. Copy the 6-digit MFA code from the sticky box and paste it into Cognito.<br />
+                7. <strong>Important:</strong> Keep this page visible so you can see the MFA code - it updates every 30 seconds!<br /><br />
+                
+                <strong>Note:</strong> Fields are not auto-populated in accordance with GxP best practices, 
+                even though this demonstration violates other GxP requirements for credential display.
               </div>
             </div>
           </div>
@@ -857,6 +780,16 @@ const styles = {
   stickyMfaContent: {
     color: "#ffffff",
   },
+  mobileNotice: {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 8,
+    background: "rgba(59, 130, 246, 0.2)",
+    border: "1px solid rgba(96, 165, 250, 0.4)",
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: "#e0f2fe",
+  },
   stickyMfaEmailWarning: {
     marginBottom: 16,
     padding: 12,
@@ -881,44 +814,6 @@ const styles = {
     borderRadius: 8,
     fontSize: 13,
     lineHeight: 1.5,
-  },
-  inlineMfaContainer: {
-    width: "100%",
-    marginTop: 20,
-    marginBottom: 24,
-    scrollMarginTop: 80,
-  },
-  inlineMfaBox: {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    borderRadius: 16,
-    padding: 20,
-    boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
-    border: "2px solid rgba(255,255,255,0.3)",
-  },
-  copyAllButton: {
-    width: "100%",
-    marginTop: 12,
-    marginBottom: 8,
-    padding: "14px 24px",
-    borderRadius: 12,
-    border: "2px solid rgba(255,255,255,0.4)",
-    background: "rgba(59, 130, 246, 0.9)",
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: 15,
-    cursor: "pointer",
-  },
-  continueToCognitoButton: {
-    width: "100%",
-    marginTop: 16,
-    padding: "14px 24px",
-    borderRadius: 12,
-    border: "2px solid rgba(255,255,255,0.4)",
-    background: "rgba(34, 197, 94, 0.9)",
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: 16,
-    cursor: "pointer",
   },
   roleButtonsContainer: {
     display: "flex",
