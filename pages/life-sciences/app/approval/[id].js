@@ -10,7 +10,18 @@ import {
   requireAuthOrRedirect,
   logout,
 } from "../../../../lib/life_sciences_app_lib/auth";
-import { formatUtcTimestamp } from "../../../../lib/life_sciences_app_lib/utils";
+
+function formatUtcTimestamp(timestamp) {
+  if (!timestamp) return "—";
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return String(timestamp);
+    const opts = { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" };
+    return `${date.toLocaleString("en-US", opts)} UTC`;
+  } catch {
+    return String(timestamp);
+  }
+}
 
 function prettyErr(e) {
   if (!e) return null;
