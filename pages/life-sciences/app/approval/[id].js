@@ -10,6 +10,7 @@ import {
   requireAuthOrRedirect,
   logout,
 } from "../../../../lib/life_sciences_app_lib/auth";
+import { formatUtcTimestamp } from "../../../../lib/life_sciences_app_lib/utils";
 
 function prettyErr(e) {
   if (!e) return null;
